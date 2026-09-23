@@ -11,6 +11,7 @@ from app.api.v1.buildings import router as buildings_router
 from app.api.v1.map import router as map_router
 from app.api.v1.spatial import router as spatial_router
 from app.api.v1.gis import router as gis_router
+from app.api.v1.threed import router as threed_router
 
 api_v1_router = APIRouter()
 
@@ -26,6 +27,7 @@ api_v1_router.include_router(buildings_router)
 api_v1_router.include_router(map_router)
 api_v1_router.include_router(spatial_router)
 api_v1_router.include_router(gis_router)
+api_v1_router.include_router(threed_router)
 
 __all__ = ["api_v1_router"]
 

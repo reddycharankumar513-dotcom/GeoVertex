@@ -1,5 +1,6 @@
 import React from 'react';
-import { X, Building2, MapPin, Layers, Maximize2, ArrowUp, Calendar } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { X, Building2, MapPin, Layers, Maximize2, ArrowUp, Calendar, Box } from 'lucide-react';
 import { Building } from '../../types';
 
 interface BuildingDetailPanelProps {
@@ -13,6 +14,7 @@ export const BuildingDetailPanel: React.FC<BuildingDetailPanelProps> = ({
   onClose,
   onSelectParcel,
 }) => {
+  const navigate = useNavigate();
   return (
     <div className="bg-slate-900/95 border border-slate-800 rounded-xl shadow-2xl backdrop-blur-md w-96 max-h-[85vh] flex flex-col overflow-hidden text-slate-200">
       {/* Header */}
@@ -39,6 +41,16 @@ export const BuildingDetailPanel: React.FC<BuildingDetailPanelProps> = ({
 
       {/* Body */}
       <div className="p-4 overflow-y-auto flex-1 space-y-4 text-xs">
+        {/* 3D Digital Twin Navigation */}
+        <button
+          type="button"
+          onClick={() => navigate(`/digital-twin?building_id=${building.id}`)}
+          className="w-full flex items-center justify-center gap-2 py-2 px-3 rounded-lg bg-gradient-to-r from-cyan-950 to-blue-950 hover:from-cyan-900 hover:to-blue-900 text-cyan-300 border border-cyan-800/60 font-medium text-xs shadow-md transition-all"
+        >
+          <Box className="w-4 h-4 text-cyan-400" />
+          <span>View in 3D Digital Twin</span>
+        </button>
+
         {/* Status & Type */}
         <div className="grid grid-cols-2 gap-2">
           <div className="bg-slate-800/40 p-2.5 rounded-lg border border-slate-800">

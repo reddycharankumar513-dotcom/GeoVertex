@@ -8,6 +8,7 @@ import { LoginPage } from './pages/LoginPage';
 import { DashboardPage } from './pages/DashboardPage';
 import { ProfilePage } from './pages/ProfilePage';
 import { CadastreMapPage } from './pages/gis/CadastreMapPage';
+import { DigitalTwin3DPage } from './pages/gis/DigitalTwin3DPage';
 import { UsersPage } from './pages/admin/UsersPage';
 import { AuditLogsPage } from './pages/admin/AuditLogsPage';
 import { UnauthorizedPage } from './pages/UnauthorizedPage';
@@ -38,6 +39,7 @@ export const App: React.FC = () => {
                 <Route path="/" element={<Navigate to="/cadastre" replace />} />
                 <Route path="/dashboard" element={<DashboardPage />} />
                 <Route path="/cadastre" element={<CadastreMapPage />} />
+                <Route path="/digital-twin" element={<DigitalTwin3DPage />} />
                 <Route path="/profile" element={<ProfilePage />} />
 
                 {/* Administration Routes */}

@@ -2,6 +2,7 @@ import React from 'react';
 import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import {
   Activity,
+  Box,
   Compass,
   FileCheck,
   History,
@@ -20,7 +21,7 @@ export const DashboardLayout: React.FC = () => {
   const { user, role, logout } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
-  const isMapPage = location.pathname.startsWith('/cadastre');
+  const isMapPage = location.pathname.startsWith('/cadastre') || location.pathname.startsWith('/digital-twin');
 
   const handleLogout = async () => {
     await logout();
@@ -58,7 +59,7 @@ export const DashboardLayout: React.FC = () => {
                 GeoVertex
               </span>
               <span className="block text-[10px] uppercase font-mono tracking-wider text-slate-400">
-                Phase 2 Cadastre GIS
+                Phase 3 Digital Twin GIS
               </span>
             </div>
           </div>
@@ -77,6 +78,20 @@ export const DashboardLayout: React.FC = () => {
             >
               <Map className="w-4 h-4 shrink-0" />
               <span>2D Cadastral Map</span>
+            </NavLink>
+
+            <NavLink
+              to="/digital-twin"
+              className={({ isActive }) =>
+                `flex items-center space-x-3 px-3.5 py-2.5 rounded-lg text-sm font-medium transition-all ${
+                  isActive
+                    ? 'bg-cyan-500/15 text-cyan-400 border border-cyan-500/30 shadow-sm'
+                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
+                }`
+              }
+            >
+              <Box className="w-4 h-4 shrink-0" />
+              <span>3D Digital Twin</span>
             </NavLink>
 
             <NavLink
@@ -184,11 +199,15 @@ export const DashboardLayout: React.FC = () => {
         {/* Top Header */}
         <header className="h-14 px-6 border-b border-slate-800/80 bg-slate-900/30 backdrop-blur flex items-center justify-between shrink-0 z-10">
           <div className="flex items-center space-x-3">
-            <div className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></div>
-            <span className="text-xs font-mono text-slate-400">PostGIS Core Engine Active</span>
+            <div className={`w-2.5 h-2.5 rounded-full animate-pulse ${location.pathname.startsWith('/digital-twin') ? 'bg-cyan-400' : 'bg-emerald-500'}`}></div>
+            <span className="text-xs font-mono text-slate-400">
+              {location.pathname.startsWith('/digital-twin') ? 'CesiumJS 3D Engine Active' : 'PostGIS Core Engine Active'}
+            </span>
             <span className="text-xs text-slate-600">|</span>
             <span className="text-xs text-slate-400">
-              {isMapPage ? (
+              {location.pathname.startsWith('/digital-twin') ? (
+                <span>Datum: <span className="text-cyan-400 font-mono">WGS84 / Meters Above Ground</span></span>
+              ) : isMapPage ? (
                 <span>CRS: <span className="text-emerald-400 font-mono">EPSG:4326 (WGS84)</span></span>
               ) : (
                 <span>API Gateway: <span className="text-emerald-400 font-mono">200 OK</span></span>

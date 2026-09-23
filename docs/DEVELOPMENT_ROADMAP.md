@@ -15,7 +15,7 @@ GeoVertex is engineered using a modular, phase-gated methodology. Each phase pro
 |---|---|---|---|
 | **Phase 1** | **Platform Foundation** | Monorepo, PostGIS DB, Auth, JWT, RBAC, Core API, React Shell, Docker, Tests | **COMPLETED** |
 | **Phase 2** | **Property & Parcel 2D GIS** | 2D Cadastral Parcels, Properties, Buildings, PostGIS/Shapely Geodesics, GIS Ingest/Export, Interactive Map | **COMPLETED** |
-| Phase 3 | 3D Digital Twin Core | CesiumJS integration, 3D terrain, parcel extrusion, 3D camera controls | Planned |
+| **Phase 3** | **3D Digital Twin Core** | CesiumJS integration, 2.5D building extrusion, vertical metadata, 2D/3D dual-viewport sync, 3D measurement | **COMPLETED** |
 | Phase 4 | Building, Floor & Unit Hierarchy | Vertical property structures, PointZ/PolygonZ, units, parent-child relations | Planned |
 | Phase 5 | Surveyor Workflow & Field Ingestion | Survey projects, GNSS point capture, image/point cloud upload, field notes | Planned |
 | Phase 6 | AI Building & Floor Extraction | Modular U-Net / Mask R-CNN segmentation, point-cloud height slice analysis | Planned |
@@ -110,10 +110,51 @@ A phase cannot be marked complete without meeting all criteria:
 
 ---
 
-## 4. Phase Transition Rules
+## 4. Phase 3: 3D Digital Twin & Vertical Spatial Foundation (Detailed Specification)
 
-1. **No Leakage**: Features designated for Phase 3+ (CesiumJS 3D digital twin, floor/unit vertical mapping, LiDAR point clouds, AI building extraction, ULPIN) must not be simulated with hardcoded mocks or dummy buttons.
-2. **Backward Compatibility**: Subsequent phases must never break the foundation established in Phases 1 and 2.
+### 4.1 Scope & Objectives
+1. 3D Digital Twin data model extending building footprints with authoritative 2.5D extrusion representations (`building_3d_representations`) and asset registry (`three_d_assets`).
+2. Authoritative vertical datums support (`WGS84_ELLIPSOID`, `EGM96_GEOID`, `LOCAL_MSL`, `GROUND_RELATIVE`) with measurement source metadata and confidence score.
+3. 3D geospatial engine with geodesic area, volume calculation ($m^3$), 3D bounding box computation `[minLon, minLat, minAlt, maxLon, maxLat, maxAlt]`, and ring/hole polygon decomposition.
+4. Comprehensive 3D REST API endpoints (`/api/v1/3d`):
+   - Scene streaming with viewport bbox and jurisdiction filtering (`GET /api/v1/3d/scene`)
+   - 3D representation retrieval (`GET /api/v1/3d/buildings/{id}`)
+   - Authorized vertical height and base elevation update (`PUT /api/v1/3d/buildings/{id}/height`)
+   - 3D spatial raycast/coordinate identify (`POST /api/v1/3d/identify`)
+   - Parcel 3D context with associated buildings (`GET /api/v1/3d/parcels/{id}`)
+   - 3D asset metadata registry (`GET /api/v1/3d/assets`)
+5. Interactive CesiumJS WebGL 3D Digital Twin frontend:
+   - Extruded 3D buildings and ground parcel boundary layer rendering
+   - Layer toggles (Buildings, Parcels, Wireframe), basemap selector, color modes (Height, Building Type, Neutral)
+   - Interactive 3D measurement tools (3D Euclidean distance & vertical height delta)
+   - 3D feature inspection panel with volume, datum, parcel links, and inline height editor
+   - Coordinate, altitude, and heading/pitch HUD
+6. 2D/3D dual-viewport synchronization with deep-linking via query parameters (`?building_id=...&parcel_id=...`) and "View in 3D" cross-navigation from 2D maps.
+7. Role-Based Access Control enforcing read permissions for Citizens/Planners and mutation permissions for Editors (Admins, Officers, Surveyors).
+8. Full audit logging for vertical height changes (`BUILDING_HEIGHT_UPDATED`, `BASE_ELEVATION_UPDATED`).
+
+### 4.2 Phase 3 Phase-Gate Criteria
+- [x] Database migration `003_phase3_3d_digital_twin` executes cleanly (`alembic upgrade head`).
+- [x] PostGIS remains the authoritative spatial database with 2.5D building extrusion metadata.
+- [x] Geodesic area, volume, and 3D bounding boxes computed accurately.
+- [x] Vertical elevation sanity validation and parcel boundary crossing checks enforced.
+- [x] CesiumJS WebGL viewer renders offline without requiring external Cesium ion tokens.
+- [x] 3D measurement tools (distance & vertical delta) functional in viewer.
+- [x] 2D-to-3D cross-navigation and URL query parameter synchronization verified.
+- [x] RBAC enforcement verified (Citizen read-only, Editor height mutation).
+- [x] Audit log captures vertical height updates with actor, old/new values, and justification.
+- [x] Automated backend tests pass 100% (52/52 passed).
+- [x] Automated frontend unit tests pass 100% (9/9 passed).
+- [x] Automated end-to-end Phase 3 demo script passes 100% (22/22 checks passed).
+- [x] Frontend builds cleanly for production (`npm run build` with 0 errors).
+
+---
+
+## 5. Phase Transition Rules
+
+1. **No Leakage**: Features designated for Phase 4+ (building floor/unit vertical mapping, PointZ/PolygonZ unit hierarchy, LiDAR point clouds, AI building extraction, ULPIN) must not be simulated with hardcoded mocks or dummy buttons.
+2. **Backward Compatibility**: Subsequent phases must never break the foundation established in Phases 1, 2, and 3.
 3. **Database Integrity**: All future schema modifications must occur strictly via versioned Alembic migration scripts.
-4. **Authoritative Gate**: Advancement to Phase 3 requires explicit developer/stakeholder sign-off on the Phase 2 Completion Report.
+4. **Authoritative Gate**: Advancement to Phase 4 requires explicit developer/stakeholder sign-off on the Phase 3 Completion Report.
+
 

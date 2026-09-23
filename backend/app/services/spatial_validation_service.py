@@ -147,5 +147,130 @@ class SpatialValidationService:
             warnings=warnings,
         )
 
+    async def validate_building_3d_candidate(
+        self,
+        db: AsyncSession,
+        height: float,
+        height_unit: str = "METERS",
+        base_elevation: float = 0.0,
+        height_confidence: Optional[float] = None,
+        geometry_input: Optional[Union[Dict[str, Any], str]] = None,
+        parcel_id: Optional[uuid.UUID] = None,
+        source_srid: int = 4326,
+    ) -> ValidationResult:
+        """Validate 3D building vertical parameters and relationship to parcel."""
+        errors: List[ValidationErrorItem] = []
+        warnings: List[ValidationWarningItem] = []
+
+        # 1. Height validation
+        if height is None or height < 0:
+            errors.append(
+                ValidationErrorItem(
+                    code="INVALID_BUILDING_HEIGHT",
+                    message="Building height must be a non-negative number.",
+                )
+            )
+
+        allowed_units = {"METERS", "FEET"}
+        if height_unit and height_unit.upper() not in allowed_units:
+            errors.append(
+                ValidationErrorItem(
+                    code="INVALID_HEIGHT_UNIT",
+                    message=f"Unsupported height unit '{height_unit}'. Allowed units: {list(allowed_units)}",
+                )
+            )
+
+        if height_confidence is not None and not (0.0 <= height_confidence <= 1.0):
+            warnings.append(
+                ValidationWarningItem(
+                    code="INVALID_CONFIDENCE_SCORE",
+                    message="Height confidence score should be between 0.0 and 1.0",
+                )
+            )
+
+        if base_elevation is not None and (base_elevation < -500.0 or base_elevation > 9000.0):
+            warnings.append(
+                ValidationWarningItem(
+                    code="EXTREME_BASE_ELEVATION",
+                    message=f"Base elevation {base_elevation}m is outside standard terrestrial ranges.",
+                )
+            )
+
+        # 2. Footprint & parcel containment if geometry is provided
+        if geometry_input:
+            footprint_res = await self.validate_building_candidate(
+                db=db,
+                geometry_input=geometry_input,
+                parcel_id=parcel_id,
+                source_srid=source_srid,
+            )
+            errors.extend(footprint_res.errors)
+            warnings.extend(footprint_res.warnings)
+
+            # Check if building footprint crosses multiple parcels
+            cross_warnings = await self.check_building_crosses_parcels(
+                db=db,
+                geometry_input=geometry_input,
+                primary_parcel_id=parcel_id,
+                source_srid=source_srid,
+            )
+            warnings.extend(cross_warnings)
+
+        return ValidationResult(
+            valid=len(errors) == 0,
+            errors=errors,
+            warnings=warnings,
+        )
+
+    async def check_building_crosses_parcels(
+        self,
+        db: AsyncSession,
+        geometry_input: Union[Dict[str, Any], str],
+        primary_parcel_id: Optional[uuid.UUID] = None,
+        source_srid: int = 4326,
+    ) -> List[ValidationWarningItem]:
+        """Detect whether building footprint crosses multiple cadastral parcels."""
+        warnings: List[ValidationWarningItem] = []
+        try:
+            b_geom = GeometryEngine.parse_geometry(geometry_input, source_srid=source_srid)
+            min_x, min_y, max_x, max_y = b_geom.bounds
+            bbox_str = f"{min_x},{min_y},{max_x},{max_y}"
+
+            # Query nearby parcels
+            intersecting_parcels = await parcel_repository.get_in_bbox(db, bbox_str)
+            crossing_parcels = []
+
+            for p in intersecting_parcels:
+                if not p.geometry_wkt:
+                    continue
+                try:
+                    p_geom = GeometryEngine.parse_geometry(p.geometry_wkt)
+                    if b_geom.intersects(p_geom):
+                        intersection = b_geom.intersection(p_geom)
+                        # More than minimal vertex touching (> 0.5 sq m area)
+                        if intersection.area > 0.00000001:
+                            crossing_parcels.append(p.parcel_code)
+                except Exception:
+                    continue
+
+            if len(crossing_parcels) > 1:
+                warnings.append(
+                    ValidationWarningItem(
+                        code="BUILDING_CROSSES_PARCELS",
+                        message=f"Building footprint intersects multiple cadastral parcels: {', '.join(crossing_parcels)}",
+                        details={"intersecting_parcel_codes": crossing_parcels},
+                    )
+                )
+        except Exception as e:
+            warnings.append(
+                ValidationWarningItem(
+                    code="PARCEL_CROSSING_CHECK_ERROR",
+                    message=f"Failed to check parcel crossing: {str(e)}",
+                )
+            )
+
+        return warnings
+
 
 spatial_validation_service = SpatialValidationService()
+

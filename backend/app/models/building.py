@@ -1,5 +1,5 @@
 import uuid
-from typing import Optional, TYPE_CHECKING
+from typing import Optional, List, TYPE_CHECKING
 from sqlalchemy import Float, ForeignKey, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.database.base import Base, GUID, SafeGeometry, TimestampMixin
@@ -7,6 +7,7 @@ from app.database.base import Base, GUID, SafeGeometry, TimestampMixin
 if TYPE_CHECKING:
     from app.models.parcel import Parcel
     from app.models.user import User
+    from app.models.threed import Building3DRepresentation, ThreeDAsset
 
 
 class BuildingFootprint(Base, TimestampMixin):
@@ -88,6 +89,17 @@ class BuildingFootprint(Base, TimestampMixin):
     parcel: Mapped[Optional["Parcel"]] = relationship(
         "Parcel",
         back_populates="buildings",
+    )
+    representation_3d: Mapped[Optional["Building3DRepresentation"]] = relationship(
+        "Building3DRepresentation",
+        back_populates="building",
+        uselist=False,
+        cascade="all, delete-orphan",
+    )
+    assets_3d: Mapped[List["ThreeDAsset"]] = relationship(
+        "ThreeDAsset",
+        back_populates="building",
+        cascade="all, delete-orphan",
     )
     creator: Mapped[Optional["User"]] = relationship(
         "User",

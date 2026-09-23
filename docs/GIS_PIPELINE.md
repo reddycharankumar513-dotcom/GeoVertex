@@ -76,11 +76,35 @@ Authoritative cadastral integrity is verified using topological integrity rules:
 
 ---
 
-## 5. 3D Digital Twin Generation (Roadmap Phase 3 & 4)
+## 5. 3D Digital Twin & 2.5D Building Extrusion Pipeline (Phase 3 Implemented)
 
-1. **2D to 3D Extrusion**:
-   Building footprints with height attributes ($H_{base}, H_{roof}$) are extruded into 3D polyhedral geometries (`ST_Extrude(footprint, 0, 0, height)`).
-2. **Floor Slicing**:
-   Elevations $Z_0 \dots Z_n$ define bounded volumetric prisms for each floor level.
-3. **CesiumJS Integration**:
-   API exposes 3D geometries as GeoJSON with height properties or batched 3D Tiles (b3dm), enabling photorealistic rendering with terrain elevation models and camera clipping planes.
+### 5.1 Architecture & Authoritative Storage
+PostGIS remains the single source of authoritative geospatial truth. 2.5D building extrusions are structured engineering representations linked to 2D building footprints:
+1. **Vertical Attributes**:
+   - $H_{base}$ (`base_elevation_m`): Ground surface elevation above datum.
+   - $H_{roof}$ (`height_m`): Vertical building height from base to roof ridge.
+   - Datum (`vertical_datum`): Explicit vertical reference datum (`WGS84_ELLIPSOID`, `EGM96_GEOID`, `LOCAL_MSL`, `GROUND_RELATIVE`).
+   - Confidence (`height_confidence`): Numeric score [0.0 - 1.0] reflecting measurement certainty.
+   - Source (`source`): Survey technique (`SURVEY_ELEVATION`, `LIDAR`, `PHOTOGRAMMETRY`, `SATELLITE_STEREO`, `PERMIT_DOCUMENT`, `MANUAL_ESTIMATE`).
+
+2. **Volumetric & Metric Derivations**:
+   - Footprint area is computed using PostGIS geodesic algorithms on the WGS 84 ellipsoid (`ST_Area(geometry::geography)`).
+   - Volumetric capacity is calculated in cubic meters:
+     $$V = A_{\text{geodesic}} \times H_{\text{roof}}$$
+   - 3D Bounding Box: Computed as `[min_lon, min_lat, min_alt, max_lon, max_lat, max_alt]` with $min\_alt = H_{base}$ and $max\_alt = H_{base} + H_{roof}$.
+
+3. **CesiumJS 3D Extrusion Protocol**:
+   - Building footprints are converted into Cesium-compatible extrusion structures with exterior rings and interior hole polygons.
+   - The scene endpoint (`GET /api/v1/3d/scene`) serves optimized polygon extrusions:
+     - `extrudedHeight` = $H_{base} + H_{roof}$
+     - `height` = $H_{base}$
+     - Coordinates in EPSG:4326 (WGS84).
+   - Parcel ground boundaries are served alongside extruded structures for spatial context at altitude $0.0$.
+
+4. **Spatial Validation & Integrity**:
+   - Elevation and height values are validated before persistence: $H_{roof} \ge 0$, base elevation within plausible terrestrial ranges ($-500\text{m} \dots 9000\text{m}$).
+   - Footprints are checked for boundary crossings against parent cadastral parcels using `ST_CoveredBy` and `ST_Intersection`.
+
+5. **2D/3D Dual-Viewport Synchronization**:
+   - Viewport synchronization between 2D MapLibre and 3D CesiumJS is achieved via entity identifier cross-links (`building_id`, `parcel_id`) and camera fly-to routines with pitch $-45^\circ$, range $180\text{m}$, and target centering.
+

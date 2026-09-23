@@ -16,6 +16,7 @@ from app.repositories.building_repository import building_repository
 from app.repositories.organization_repository import organization_repository, jurisdiction_repository
 from app.repositories.parcel_repository import parcel_repository
 from app.repositories.property_repository import property_repository
+from app.repositories.threed_repository import threed_repository
 from app.repositories.user_repository import user_repository
 
 
@@ -466,11 +467,50 @@ async def seed_database():
                         )
                         bld = await building_repository.create(db, bld)
                         logger.info(f"  +-- Seeded Building: {bld.building_reference} ({b_area} sq m)")
+                    else:
+                        bld = existing_bld
+
+                    # Seed Phase 3 3D Representation
+                    rep_3d = await threed_repository.save_representation(
+                        db=db,
+                        building_id=bld.id,
+                        height=bld.height_estimate or 18.0,
+                        height_source="SURVEY" if bld.height_estimate else "ESTIMATED",
+                        height_confidence=0.92 if bld.height_estimate else 0.70,
+                        height_unit="METERS",
+                        base_elevation=0.0,
+                        elevation_source="LOCAL_REFERENCE_PLANE",
+                        vertical_reference="METERS_ABOVE_GROUND",
+                        geometry_type="EXTRUSION",
+                        model_source="EXTRUDED_FOOTPRINT",
+                        status="ACTIVE",
+                    )
+                    logger.info(f"    +-- Seeded 3D Extrusion: {rep_3d.height}m ({rep_3d.height_source})")
             else:
                 logger.info(f"Parcel exists: {existing_parcel.parcel_code}")
+                # Ensure existing buildings have 3D representations
+                bld_data = p_data.get("building")
+                if bld_data:
+                    existing_bld = await building_repository.get_by_reference(db, bld_data["ref"])
+                    if existing_bld:
+                        rep_3d = await threed_repository.save_representation(
+                            db=db,
+                            building_id=existing_bld.id,
+                            height=existing_bld.height_estimate or 18.0,
+                            height_source="SURVEY" if existing_bld.height_estimate else "ESTIMATED",
+                            height_confidence=0.92 if existing_bld.height_estimate else 0.70,
+                            height_unit="METERS",
+                            base_elevation=0.0,
+                            elevation_source="LOCAL_REFERENCE_PLANE",
+                            vertical_reference="METERS_ABOVE_GROUND",
+                            geometry_type="EXTRUSION",
+                            model_source="EXTRUDED_FOOTPRINT",
+                            status="ACTIVE",
+                        )
+                        logger.info(f"    +-- Verified 3D Extrusion: {existing_bld.building_reference} -> {rep_3d.height}m")
 
         await db.commit()
-    logger.info("Database seeding completed successfully with Phase 2 Cadastral GIS Data!")
+    logger.info("Database seeding completed successfully with Phase 2 Cadastral GIS & Phase 3 3D Digital Twin Data!")
 
 
 if __name__ == "__main__":

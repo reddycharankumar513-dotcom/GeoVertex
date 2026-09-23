@@ -86,6 +86,26 @@ class ParcelRepository(BaseRepository[Parcel]):
         items = list(items_res.scalars().all())
         return items, total
 
+    async def list(
+        self,
+        db: AsyncSession,
+        jurisdiction_id: Optional[uuid.UUID] = None,
+        status: Optional[str] = None,
+        land_use: Optional[str] = None,
+        query: Optional[str] = None,
+        skip: int = 0,
+        limit: int = 50,
+    ) -> Tuple[List[Parcel], int]:
+        return await self.search_and_filter(
+            db=db,
+            jurisdiction_id=jurisdiction_id,
+            status=status,
+            land_use=land_use,
+            query=query,
+            skip=skip,
+            limit=limit,
+        )
+
     async def get_by_bbox(
         self,
         db: AsyncSession,

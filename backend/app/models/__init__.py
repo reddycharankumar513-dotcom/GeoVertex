@@ -7,6 +7,7 @@ from app.models.audit import AuditEvent
 from app.models.parcel import Parcel
 from app.models.property import Property
 from app.models.building import BuildingFootprint
+from app.models.threed import Building3DRepresentation, ThreeDAsset
 
 __all__ = [
     "Base",
@@ -19,5 +20,7 @@ __all__ = [
     "Parcel",
     "Property",
     "BuildingFootprint",
+    "Building3DRepresentation",
+    "ThreeDAsset",
 ]
 

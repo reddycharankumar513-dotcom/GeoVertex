@@ -337,50 +337,51 @@ USING GIST (geometry);
 
 ---
 
-# 10. 3D ARCHITECTURE
+# 10. 3D ARCHITECTURE (Phase 3 Core Implementation)
 
-CesiumJS is the primary 3D visualization engine.
+CesiumJS is the authoritative 3D WebGL visualization engine for GeoVertex.
 
-Data flow:
+### 10.1 Data Flow Pipeline
+```
+PostgreSQL / PostGIS (Authoritative Spatial Truth)
+  ├── 2D Building Footprints (geometry EPSG:4326)
+  └── 2.5D Building Representations (base_elevation_m, height_m, vertical_datum)
+        │
+        ▼
+FastAPI 3D Service (/api/v1/3d)
+  ├── Geometry 3D Engine (geodesic area, volume m³, bbox [minLon, minLat, minAlt, maxLon, maxLat, maxAlt])
+  └── Cesium Extrusion Formatter (exterior rings, interior hole polygons, extrudedHeight, height)
+        │
+        ▼
+CesiumJS WebGL Viewer (Frontend /digital-twin)
+  ├── Carto Dark Matter / OSM Tile Imagery (Offline-capable, token-free)
+  ├── Extruded Building Polygons & Ground Parcel Boundaries
+  ├── 3D Measurement Tools (Euclidean Distance & Vertical Height Delta)
+  ├── Interactive Feature Raycast & Selection HUD
+  └── 2D/3D Dual-Viewport URL Sync (?building_id=...&parcel_id=...)
+```
 
-PostGIS
-↓
-3D API
-↓
-GeoJSON / 3D Tiles / supported geometry
-↓
-CesiumJS
-↓
-3D View
-
-The system should eventually support tiled 3D datasets for large-scale visualization.
+### 10.2 Vertical Datums & Reference Systems
+The 3D engine strictly tracks vertical reference datums:
+- `WGS84_ELLIPSOID`: Global GPS ellipsoidal height datum.
+- `EGM96_GEOID`: Global gravitational geoid model.
+- `LOCAL_MSL`: Local Mean Sea Level height.
+- `GROUND_RELATIVE`: Height relative to local terrain surface.
 
 ---
 
 # 11. 3D DIGITAL TWIN ARCHITECTURE
 
-The digital twin is composed of:
+The Phase 3 digital twin layers:
+- **Ground Context**: Authoritative Cadastral Parcel boundaries projected at ground altitude $0.0$.
+- **Building Volume**: 2.5D Building Footprint extrusions from $H_{base}$ to $H_{base} + H_{roof}$.
+- **Metrics**: Geodesic footprint area ($m^2$), 3D volumetric capacity ($m^3$), height confidence ($0.0 \dots 1.0$), and survey source.
+- **Audit & History**: Height and elevation mutations logged to `audit_logs` (`BUILDING_HEIGHT_UPDATED`, `BASE_ELEVATION_UPDATED`).
+- **2D/3D Bi-Directional Linkage**:
+  - Selecting a parcel or building in the 2D Cadastral Map provides a direct "View in 3D Digital Twin" action.
+  - Selecting an extruded building in the 3D viewer links back to the 2D Cadastral Record and parcel context.
 
-Terrain
-+
-Parcel
-+
-Building
-+
-Floor
-+
-Unit
-+
-Utility
-
-Each object has:
-
-* ID
-* Geometry
-* Source
-* Version
-* Confidence
-* Verification status
+Subsequent phases (Phase 4+) will layer floor slices, unit volumetric parcels, and utility linestrings.
 
 ---
 

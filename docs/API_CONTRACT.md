@@ -210,7 +210,162 @@ All 4xx and 5xx responses strictly adhere to the unified error schema:
 ## 6. Audit Logs (`/api/v1/audit`)
 
 ### `GET /api/v1/audit`
-- **Purpose**: Query security, administrative, and operational events.
+- **Purpose**: Query security, administrative, spatial, and vertical 3D events.
 - **Auth**: Bearer Token (`ADMIN` only)
 - **Query Params**: `entity_type`, `action`, `actor_user_id`, `page`, `size`
 - **Response `200 OK`**: Paginated list of AuditLog items.
+
+---
+
+## 7. Phase 2 Cadastral GIS Endpoints
+
+### 7.1 Parcels (`/api/v1/parcels`)
+- `GET /api/v1/parcels`: List/search parcels with filters (`jurisdiction_id`, `status`, `land_use`, `query`).
+- `POST /api/v1/parcels`: Create parcel with strict topology validation (`require_editor`).
+- `GET /api/v1/parcels/{id}`: Detailed parcel record with linked properties and buildings.
+- `PATCH /api/v1/parcels/{id}`: Update parcel attributes or boundary geometry (`require_editor`).
+- `DELETE /api/v1/parcels/{id}`: Soft delete or retire parcel (`require_officer_or_admin`).
+
+### 7.2 Properties (`/api/v1/properties`)
+- `GET /api/v1/properties`: List registered legal properties.
+- `POST /api/v1/properties`: Register legal property record (`require_editor`).
+- `GET /api/v1/properties/{id}`: Property detail.
+- `PATCH /api/v1/properties/{id}`: Update property attributes.
+
+### 7.3 Buildings (`/api/v1/buildings`)
+- `GET /api/v1/buildings`: List/search building footprints.
+- `POST /api/v1/buildings`: Create footprint with containment and overlap validation (`require_editor`).
+- `GET /api/v1/buildings/{id}`: Footprint details.
+- `PATCH /api/v1/buildings/{id}`: Update footprint geometry.
+
+### 7.4 GIS Spatial & Map Endpoints
+- `GET /api/v1/map/layers`: Viewport GeoJSON features (boundaries, parcels, buildings).
+- `GET /api/v1/map/identify`: 2D point-in-polygon identification.
+- `POST /api/v1/spatial/validate`: Standalone geometry topology validation.
+- `GET /api/v1/gis/export/geojson`: Export cadastral datasets as RFC 7946 GeoJSON.
+- `POST /api/v1/gis/import/geojson`: Bulk ingest GeoJSON with rollback transaction (`require_editor`).
+
+---
+
+## 8. Phase 3 3D Digital Twin & Vertical GIS Endpoints (`/api/v1/3d`)
+
+### 8.1 `GET /api/v1/3d/scene`
+- **Purpose**: Retrieve lightweight, CesiumJS-ready 3D Digital Twin scene payload with 2.5D building extrusions and cadastral parcel wireframes.
+- **Auth**: Bearer Token (All authenticated roles)
+- **Query Params**:
+  - `bbox`: Optional bounding box (`minLon,minLat,maxLon,maxLat`)
+  - `jurisdiction_id`: Optional UUID filter
+  - `limit`: Integer (default 150, max 500)
+- **Response `200 OK`**:
+```json
+{
+  "scene": {
+    "crs": "EPSG:4326",
+    "vertical_reference": "METERS_ABOVE_GROUND",
+    "center": [78.4875, 17.3828, 0.0],
+    "bounds": [78.4860, 17.3820, 78.4930, 17.3840],
+    "camera_preset": {
+      "destination": [78.4875, 17.3810, 450.0],
+      "orientation": { "heading": 0.0, "pitch": -45.0, "roll": 0.0 }
+    }
+  },
+  "buildings": [
+    {
+      "building_id": "7ea68058-3735-4464-aeb2-7be7c6d4a91f",
+      "building_reference": "BLD-W101-001",
+      "building_type": "COMMERCIAL",
+      "status": "EXISTING",
+      "parcel_id": "05df3ea9-3fb0-4d46-94e4-e6e2bb0fc59a",
+      "parcel_code": "GV-W101-P101",
+      "footprint_area_sq_m": 1250.0,
+      "volume_cu_m": 56250.0,
+      "height": 45.0,
+      "height_source": "SURVEY",
+      "height_confidence": 0.95,
+      "height_unit": "METERS",
+      "base_elevation": 0.0,
+      "elevation_source": "LOCAL_REFERENCE_PLANE",
+      "vertical_reference": "METERS_ABOVE_GROUND",
+      "extruded_height": 45.0,
+      "centroid": [78.4870, 17.3830, 0.0],
+      "bbox_3d": [78.4863, 17.3823, 0.0, 78.4877, 17.3837, 45.0],
+      "rings": [
+        {
+          "exterior": [78.4863, 17.3823, 78.4877, 17.3823, 78.4877, 17.3837, 78.4863, 17.3837, 78.4863, 17.3823],
+          "holes": []
+        }
+      ]
+    }
+  ],
+  "parcels": [
+    {
+      "type": "Feature",
+      "id": "05df3ea9-3fb0-4d46-94e4-e6e2bb0fc59a",
+      "properties": {
+        "parcel_code": "GV-W101-P101",
+        "land_use": "COMMERCIAL",
+        "area_sq_m": 4200.0
+      },
+      "geometry": { "type": "Polygon", "coordinates": [...] }
+    }
+  ]
+}
+```
+
+### 8.2 `GET /api/v1/3d/buildings/{id}`
+- **Purpose**: Retrieve authoritative 3D representation, vertical datum, parent parcel, and property records for a building.
+- **Auth**: Bearer Token (All authenticated roles)
+- **Response `200 OK`**:
+```json
+{
+  "building": { "id": "...", "building_reference": "BLD-W101-001", "area_sq_m": 1250.0 },
+  "representation_3d": {
+    "id": "...",
+    "height": 45.0,
+    "height_source": "SURVEY",
+    "base_elevation": 0.0,
+    "vertical_reference": "METERS_ABOVE_GROUND"
+  },
+  "parcel": { "id": "...", "parcel_code": "GV-W101-P101", "land_use": "COMMERCIAL" },
+  "properties": [{ "property_reference": "PROP-W101-001", "address": "101 High Street" }],
+  "cesium_extrusion": { ... }
+}
+```
+
+### 8.3 `PATCH /api/v1/3d/buildings/{id}/height`
+- **Purpose**: Update building vertical height and base elevation with geometric validation and audit trail.
+- **Auth**: Bearer Token (`ADMIN`, `GOVERNMENT_OFFICER`, `SURVEYOR`)
+- **Request Body**:
+```json
+{
+  "height": 52.0,
+  "base_elevation": 1.5,
+  "height_source": "SURVEY",
+  "height_confidence": 0.98,
+  "vertical_reference": "METERS_ABOVE_GROUND"
+}
+```
+- **Response `200 OK`**: Updated `Building3DRepresentationResponse`.
+
+### 8.4 `GET /api/v1/3d/parcels/{id}`
+- **Purpose**: Retrieve 3D context for a parcel including ground boundary, all contained extruded buildings, and camera preset.
+- **Auth**: Bearer Token (All authenticated roles)
+
+### 8.5 `GET /api/v1/3d/identify`
+- **Purpose**: 3D point identify query.
+- **Auth**: Bearer Token (All authenticated roles)
+- **Query Params**: `lon`, `lat`, `height`, `radius`
+- **Response `200 OK`**:
+```json
+{
+  "building": { "id": "...", "building_reference": "BLD-W101-001", "height": 45.0 },
+  "parcel": { "id": "...", "parcel_code": "GV-W101-P101" },
+  "property": { "id": "...", "property_reference": "PROP-W101-001" },
+  "jurisdiction": { "id": "...", "name": "Ward 101" }
+}
+```
+
+### 8.6 `GET /api/v1/3d/assets` and `POST /api/v1/3d/assets`
+- **Purpose**: Asset management for glTF, GLB, and JSON extrusion models.
+- **Auth**: `POST` / `DELETE` require `ADMIN`, `GOVERNMENT_OFFICER`, or `SURVEYOR`.
+

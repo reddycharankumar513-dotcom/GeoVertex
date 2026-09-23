@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   X,
   MapPin,
@@ -11,6 +12,7 @@ import {
   ExternalLink,
   Shield,
   Layers,
+  Box,
 } from 'lucide-react';
 import { Parcel, PropertySummary, BuildingSummary, UserRole } from '../../types';
 
@@ -33,6 +35,7 @@ export const ParcelDetailPanel: React.FC<ParcelDetailPanelProps> = ({
   onSelectBuilding,
   onRefresh,
 }) => {
+  const navigate = useNavigate();
   const [isDeleting, setIsDeleting] = useState(false);
   const [activeTab, setActiveTab] = useState<'details' | 'properties' | 'buildings'>('details');
 
@@ -136,6 +139,16 @@ export const ParcelDetailPanel: React.FC<ParcelDetailPanelProps> = ({
 
       {/* Tab Content */}
       <div className="p-4 overflow-y-auto flex-1 space-y-4 text-xs">
+        {/* 3D Digital Twin Navigation */}
+        <button
+          type="button"
+          onClick={() => navigate(`/digital-twin?parcel_id=${parcel.id}`)}
+          className="w-full flex items-center justify-center gap-2 py-2 px-3 rounded-lg bg-gradient-to-r from-cyan-950 to-blue-950 hover:from-cyan-900 hover:to-blue-900 text-cyan-300 border border-cyan-800/60 font-medium text-xs shadow-md transition-all"
+        >
+          <Box className="w-4 h-4 text-cyan-400" />
+          <span>View in 3D Digital Twin</span>
+        </button>
+
         {activeTab === 'details' && (
           <>
             {/* Status & Land Use */}

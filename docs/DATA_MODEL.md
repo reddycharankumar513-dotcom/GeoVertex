@@ -99,39 +99,124 @@ Immutable record of all operational and security-sensitive occurrences.
 
 ---
 
-## 3. Spatial Reference Strategy & PostGIS Integration
+## 3. Phase 2 Cadastral Entities
 
-GeoVertex maintains high cartographic and surveying accuracy by adopting a dual CRS standard:
-1. **Global Storage & Interchange (EPSG:4326 - WGS 84)**: All geometries stored in base database columns are standardized to EPSG:4326 in lon/lat or lon/lat/height coordinates for maximum web compatibility (GeoJSON, CesiumJS, MapLibre).
-2. **Local Metric Calculation (Projected CRS - UTM or Local State Planes)**: Geodetic distance, 3D volume, and 2D area calculations are evaluated dynamically using `ST_Transform(geom, target_epsg)` or PostGIS geography types to guarantee metric fidelity down to millimeter precision.
+### 3.1 `parcels`
+Authoritative 2D cadastral land parcel boundary.
 
-### Spatial Types by Cadastral Entity (Phases 2-10 Roadmap)
-- **Parcels**: `GEOMETRY(MultiPolygon, 4326)`
-- **Buildings**: `GEOMETRY(MultiPolygonZ, 4326)` (Footprint extruded with Base and Roof heights)
-- **Floors**: `GEOMETRY(PolygonZ, 4326)` (Height-delimited vertical slice)
-- **Units**: `GEOMETRY(PolyhedralSurfaceZ, 4326)` or `MultiPolygonZ` (Volumetric spatial object)
-- **Utilities**: `GEOMETRY(LineStringZ, 4326)` (Subsurface coordinates with depth attribute)
+| Column | Type | Constraints | Description |
+|---|---|---|---|
+| `id` | UUID | PRIMARY KEY, DEFAULT gen_random_uuid() | Unique parcel identifier |
+| `jurisdiction_id` | UUID | NOT NULL, REFERENCES jurisdictions(id) ON DELETE CASCADE | Administrative jurisdiction |
+| `parcel_number` | VARCHAR(64) | NOT NULL | Local parcel identifier |
+| `parcel_code` | VARCHAR(128) | NOT NULL, UNIQUE | Global ULPIN-ready identifier (`GV-{JUR}-P{NUM}`) |
+| `survey_number` | VARCHAR(64) | NULLABLE | Historical cadastral survey sheet reference |
+| `subdivision_number`| VARCHAR(32) | NULLABLE | Land subdivision reference |
+| `land_use` | VARCHAR(64) | NOT NULL, DEFAULT 'RESIDENTIAL' | `RESIDENTIAL`, `COMMERCIAL`, `INDUSTRIAL`, `MIXED`, etc. |
+| `area` | FLOAT | NOT NULL | Geodesic ground area in square meters |
+| `area_unit` | VARCHAR(32) | NOT NULL, DEFAULT 'SQ_METER' | Area measurement unit |
+| `status` | VARCHAR(32) | NOT NULL, DEFAULT 'ACTIVE' | `ACTIVE`, `PENDING_REVIEW`, `RETIRED`, `DISPUTED` |
+| `ownership_status` | VARCHAR(32) | NOT NULL, DEFAULT 'RECORDED' | Legal status |
+| `geometry` | TEXT / GEOMETRY(MultiPolygon, 4326) | NOT NULL | Canonical EPSG:4326 polygon geometry |
+| `geometry_wkt` | TEXT | NOT NULL | Standard WKT representation |
+| `centroid_lon` | FLOAT | NOT NULL | Geodesic centroid longitude |
+| `centroid_lat` | FLOAT | NOT NULL | Geodesic centroid latitude |
+| `source` | VARCHAR(128) | NOT NULL, DEFAULT 'SURVEY' | Provenance of record |
+
+### 3.2 `properties`
+Legal property ownership and municipal registry record associated with a parcel.
+
+| Column | Type | Constraints | Description |
+|---|---|---|---|
+| `id` | UUID | PRIMARY KEY, DEFAULT gen_random_uuid() | Unique property ID |
+| `parcel_id` | UUID | NOT NULL, REFERENCES parcels(id) ON DELETE CASCADE | Parent cadastral parcel |
+| `property_reference`| VARCHAR(128)| NOT NULL, UNIQUE | Property register code (`PROP-{JUR}-{NUM}`) |
+| `property_type` | VARCHAR(64) | NOT NULL | `FREEHOLD`, `LEASEHOLD`, `COMMERCIAL`, `PUBLIC`, etc. |
+| `status` | VARCHAR(32) | NOT NULL, DEFAULT 'ACTIVE' | `ACTIVE`, `INACTIVE`, `DISPUTED` |
+| `address` | TEXT | NOT NULL | Physical street address |
+| `locality` | VARCHAR(128) | NULLABLE | Neighborhood or locality |
+| `postal_code` | VARCHAR(32) | NULLABLE | Postal pincode |
+
+### 3.3 `buildings` (Building Footprints)
+2D building footprint polygon situated within a cadastral parcel.
+
+| Column | Type | Constraints | Description |
+|---|---|---|---|
+| `id` | UUID | PRIMARY KEY, DEFAULT gen_random_uuid() | Building footprint ID |
+| `parcel_id` | UUID | NULLABLE, REFERENCES parcels(id) ON DELETE SET NULL | Host cadastral parcel |
+| `building_reference`| VARCHAR(128)| NOT NULL, UNIQUE | Building reference code (`BLD-{JUR}-{NUM}`) |
+| `building_type` | VARCHAR(64) | NOT NULL, DEFAULT 'RESIDENTIAL' | `RESIDENTIAL`, `COMMERCIAL`, `MIXED_USE`, `INDUSTRIAL` |
+| `status` | VARCHAR(32) | NOT NULL, DEFAULT 'EXISTING' | `EXISTING`, `PROPOSED`, `DEMOLISHED` |
+| `area` | FLOAT | NOT NULL | Geodesic footprint ground area ($m^2$) |
+| `height_estimate` | FLOAT | NULLABLE | Optional preliminary height in meters |
+| `geometry` | TEXT / GEOMETRY(Polygon, 4326) | NOT NULL | Canonical EPSG:4326 footprint boundary |
+| `geometry_wkt` | TEXT | NOT NULL | Standard WKT string |
 
 ---
 
-## 4. Forward Entity Schemas (Phases 2-15 Preview)
+## 4. Phase 3 3D Digital Twin & Vertical Spatial Entities
+
+### 4.1 `building_3d_representations`
+Authoritative 3D vertical representation and 2.5D extrusion parameters for a building footprint.
+
+| Column | Type | Constraints | Description |
+|---|---|---|---|
+| `id` | UUID | PRIMARY KEY, DEFAULT gen_random_uuid() | Unique 3D representation ID |
+| `building_id` | UUID | NOT NULL, UNIQUE, REFERENCES buildings(id) ON DELETE CASCADE | 1-to-1 link to building footprint |
+| `geometry_type` | VARCHAR(64) | NOT NULL, DEFAULT 'EXTRUSION' | Representation geometry (`EXTRUSION`, `LOD1`, `LOD2`) |
+| `height` | FLOAT | NOT NULL, DEFAULT 12.0 | Vertical height $H_{roof}$ in meters |
+| `height_source` | VARCHAR(64) | NOT NULL, DEFAULT 'ESTIMATED' | `SURVEY`, `GOVERNMENT_DATA`, `MANUAL`, `ESTIMATED` |
+| `height_confidence`| FLOAT | NULLABLE | Confidence score (0.0 to 1.0) |
+| `height_unit` | VARCHAR(32) | NOT NULL, DEFAULT 'METERS' | Vertical measurement unit |
+| `base_elevation` | FLOAT | NOT NULL, DEFAULT 0.0 | Ground elevation $H_{base}$ relative to datum |
+| `elevation_source` | VARCHAR(64) | NOT NULL, DEFAULT 'LOCAL_REFERENCE_PLANE' | Source of ground elevation datum |
+| `vertical_reference`| VARCHAR(64) | NOT NULL, DEFAULT 'METERS_ABOVE_GROUND' | `METERS_ABOVE_GROUND`, `WGS84_ELLIPSOID`, `ORTHOMETRIC` |
+| `model_source` | VARCHAR(64) | NOT NULL, DEFAULT 'EXTRUDED_FOOTPRINT' | Generating pipeline |
+| `model_version` | INTEGER | NOT NULL, DEFAULT 1 | Incremental revision version |
+| `status` | VARCHAR(32) | NOT NULL, DEFAULT 'ACTIVE' | `ACTIVE`, `SUPERSEDED`, `ARCHIVED` |
+
+### 4.2 `threed_assets`
+3D model assets, glTF/GLB packages, and cached extrusion files.
+
+| Column | Type | Constraints | Description |
+|---|---|---|---|
+| `id` | UUID | PRIMARY KEY, DEFAULT gen_random_uuid() | Asset identifier |
+| `building_id` | UUID | NULLABLE, REFERENCES buildings(id) ON DELETE CASCADE | Associated building |
+| `representation_id`| UUID | NULLABLE, REFERENCES building_3d_representations(id) ON DELETE CASCADE | Associated 3D representation |
+| `asset_type` | VARCHAR(64) | NOT NULL, DEFAULT 'EXTRUSION' | `EXTRUSION`, `GLTF`, `GLB`, `CITYGML` |
+| `storage_location` | VARCHAR(512) | NOT NULL | URI or virtual path to 3D asset |
+| `format` | VARCHAR(64) | NOT NULL, DEFAULT 'JSON_EXTRUSION' | File/serialization format |
+| `version` | INTEGER | NOT NULL, DEFAULT 1 | Asset asset revision |
+| `status` | VARCHAR(32) | NOT NULL, DEFAULT 'ACTIVE' | `ACTIVE`, `PROCESSING`, `DEPRECATED` |
+| `source` | VARCHAR(64) | NOT NULL, DEFAULT 'SYSTEM_GENERATED' | Ingestion or compilation source |
+| `metadata_json` | TEXT | NULLABLE | Supplementary technical metadata |
+
+---
+
+## 5. Spatial Reference Strategy & Vertical Datums
+
+1. **Horizontal Standard (EPSG:4326 - WGS 84)**: All geometries stored in base database columns are standardized to EPSG:4326 in lon/lat coordinates.
+2. **Vertical Reference Datums**:
+   - `METERS_ABOVE_GROUND`: Standard terrestrial reference plane where ground = $0.0m$ and extruded height = $H_{roof}$.
+   - `LOCAL_REFERENCE_PLANE`: Local municipal benchmark datum.
+   - `WGS84_ELLIPSOID`: Absolute ellipsoidal height ($h = H + N$).
+3. **Geodesic Math**: Area and volume calculations utilize `pyproj.Geod(ellps="WGS84")` for curvature-accurate metrics.
+
+---
+
+## 6. Entity Relationship Architecture (Phases 1-3)
 
 ```
 [organizations] 1 ──< [jurisdictions] 1 ──< [parcels]
                                                 │
                                     ┌───────────┴───────────┐
                                     ▼                       ▼
-                              [buildings]             [utilities]
-                                    │
-                                    ▼
-                                 [floors]
-                                    │
-                                    ▼
-                                 [units]
+                              [properties]            [buildings]
+                                                           │ 1
+                                                           ▼ 1
+                                             [building_3d_representations]
+                                                           │ 1
+                                                           ▼ *
+                                                     [threed_assets]
 ```
 
-All future entities map directly to the technical property identifier schema:
-- Parcel: `GV-{JURISDICTION}-{PARCEL_SERIAL}`
-- Building: `GV-{JURISDICTION}-{PARCEL_SERIAL}-B{NUM}`
-- Floor: `GV-{JURISDICTION}-{PARCEL_SERIAL}-B{NUM}-F{NUM}`
-- Unit: `GV-{JURISDICTION}-{PARCEL_SERIAL}-B{NUM}-F{NUM}-U{NUM}`

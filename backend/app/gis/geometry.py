@@ -126,6 +126,11 @@ class GeometryEngine:
         return mapping(geom)
 
     @classmethod
+    def to_geojson_dict(cls, geom: shapely.Geometry) -> Dict[str, Any]:
+        """Converts Shapely geometry to GeoJSON dict."""
+        return mapping(geom)
+
+    @classmethod
     def validate_geometry(
         cls,
         geom_input: Union[Dict[str, Any], str, shapely.Geometry],

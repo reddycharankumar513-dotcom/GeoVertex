@@ -75,5 +75,25 @@ class PropertyRepository(BaseRepository[Property]):
         items = list(items_res.scalars().all())
         return items, total
 
+    async def list(
+        self,
+        db: AsyncSession,
+        parcel_id: Optional[uuid.UUID] = None,
+        property_type: Optional[str] = None,
+        status: Optional[str] = None,
+        query: Optional[str] = None,
+        skip: int = 0,
+        limit: int = 50,
+    ) -> Tuple[List[Property], int]:
+        return await self.search_and_filter(
+            db=db,
+            parcel_id=parcel_id,
+            property_type=property_type,
+            status=status,
+            query=query,
+            skip=skip,
+            limit=limit,
+        )
+
 
 property_repository = PropertyRepository()
