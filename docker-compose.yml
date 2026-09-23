@@ -1,0 +1,76 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgis/postgis:16-3.4
+    container_name: geovertex_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: geovertex
+      POSTGRES_PASSWORD: geovertex_password
+      POSTGRES_DB: geovertex_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - geovertex_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U geovertex -d geovertex_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: geovertex_redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - geovertex_redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.backend
+    container_name: geovertex_backend
+    restart: unless-stopped
+    command: >
+      sh -c "alembic upgrade head &&
+             python -m app.seed &&
+             uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
+    environment:
+      DATABASE_URL: postgresql+psycopg://geovertex:geovertex_password@postgres:5432/geovertex_db
+      REDIS_URL: redis://redis:6379/0
+      JWT_SECRET: geovertex-super-secret-jwt-key-change-in-production-2026
+      ENVIRONMENT: development
+      DEBUG: "true"
+      CORS_ORIGINS: "http://localhost:3000,http://localhost:5173,http://localhost:80"
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./backend:/app/backend
+
+  frontend:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.frontend
+    container_name: geovertex_frontend
+    restart: unless-stopped
+    ports:
+      - "3000:80"
+    depends_on:
+      - backend
+
+volumes:
+  geovertex_pgdata:
+  geovertex_redisdata:
