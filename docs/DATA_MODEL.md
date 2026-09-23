@@ -193,7 +193,63 @@ Authoritative 3D vertical representation and 2.5D extrusion parameters for a bui
 
 ---
 
-## 5. Spatial Reference Strategy & Vertical Datums
+## 5. Phase 4 Building, Floor & Unit Hierarchy Entities
+
+### 5.1 `floors`
+Authoritative vertical floor slab slicing within a building footprint ($Z_{min} \dots Z_{max}$).
+
+| Column | Type | Constraints | Description |
+|---|---|---|---|
+| `id` | UUID | PRIMARY KEY, DEFAULT gen_random_uuid() | Unique floor identifier |
+| `building_id` | UUID | NOT NULL, REFERENCES buildings(id) ON DELETE CASCADE | Parent host building footprint |
+| `floor_number` | INTEGER | NOT NULL | Zero-indexed level designation (e.g. `0`=Ground, `1`=Level 1, `-1`=Basement) |
+| `floor_code` | VARCHAR(128) | NOT NULL | Systematic floor code (`{BLD_REF}-F{NUM}`) |
+| `floor_name` | VARCHAR(255) | NULLABLE | Human-readable floor name (e.g., "Ground Floor Lobby & Retail") |
+| `floor_type` | VARCHAR(64) | NOT NULL, DEFAULT 'COMMERCIAL' | `RESIDENTIAL`, `COMMERCIAL`, `MIXED_USE`, `PARKING`, `BASEMENT` |
+| `elevation_min_m` | FLOAT | NOT NULL | Base floor slab elevation $Z_{min}$ relative to building base |
+| `elevation_max_m` | FLOAT | NOT NULL | Top floor slab elevation $Z_{max}$ relative to building base |
+| `height_m` | FLOAT | NOT NULL | Vertical floor slab thickness: $\Delta H = Z_{max} - Z_{min} > 0$ |
+| `area_sqm` | FLOAT | NULLABLE | Floor slab horizontal area ($m^2$) |
+| `geometry` | GEOMETRY(Polygon, 4326) | NULLABLE | Floor slab horizontal polygon (defaults to building footprint) |
+| `geometry_wkt` | TEXT | NULLABLE | WKT polygon representation |
+| `confidence` | FLOAT | NULLABLE | Confidence score (0.0 to 1.0) |
+| `status` | VARCHAR(32) | NOT NULL, DEFAULT 'ACTIVE' | `ACTIVE`, `INACTIVE`, `UNDER_CONSTRUCTION`, `DEMOLISHED` |
+| `source` | VARCHAR(64) | NOT NULL, DEFAULT 'SURVEY' | `SURVEY`, `ARCHITECTURAL_PLAN`, `MANUAL`, `ESTIMATED` |
+
+*Table Constraints*:
+- `UNIQUE(building_id, floor_number)`: Strict uniqueness constraint per building floor number.
+- `CHECK(elevation_max_m > elevation_min_m)`: Guarantees positive elevation thickness.
+
+### 5.2 `property_units`
+Spatial subdivisions of a floor slab representing distinct rentable, salable, or privately owned property units.
+
+| Column | Type | Constraints | Description |
+|---|---|---|---|
+| `id` | UUID | PRIMARY KEY, DEFAULT gen_random_uuid() | Unique property unit identifier |
+| `floor_id` | UUID | NOT NULL, REFERENCES floors(id) ON DELETE CASCADE | Parent floor slab |
+| `building_id` | UUID | NOT NULL, REFERENCES buildings(id) ON DELETE CASCADE | Parent host building footprint |
+| `property_id` | UUID | NULLABLE, REFERENCES properties(id) ON DELETE SET NULL | Optional legal cadastral property attachment |
+| `unit_number` | VARCHAR(64) | NOT NULL | Local unit designation (e.g. "101", "Penthouse A") |
+| `unit_code` | VARCHAR(128) | NOT NULL, UNIQUE | Systematic unique code (`{BLD_REF}-U{NUM}`) |
+| `unit_type` | VARCHAR(64) | NOT NULL, DEFAULT 'APARTMENT' | `APARTMENT`, `OFFICE`, `RETAIL_SHOP`, `WAREHOUSE`, `COMMON_AREA` |
+| `use_category` | VARCHAR(64) | NOT NULL, DEFAULT 'OFFICE' | Sub-category of economic or residential usage |
+| `gross_area_sqm` | FLOAT | NOT NULL, DEFAULT 0.0 | Gross built-up area ($m^2$) |
+| `net_area_sqm` | FLOAT | NOT NULL, DEFAULT 0.0 | Carpet/usable area ($m^2$), strictly $\le gross\_area$ |
+| `elevation_min_m` | FLOAT | NOT NULL | Base unit elevation relative to building base |
+| `elevation_max_m` | FLOAT | NOT NULL | Top unit elevation relative to building base |
+| `height_m` | FLOAT | NOT NULL | Vertical unit prism height ($m$) |
+| `geometry` | GEOMETRY(Polygon, 4326) | NOT NULL | Horizontal unit boundary polygon |
+| `geometry_wkt` | TEXT | NOT NULL | Standard WKT polygon |
+| `status` | VARCHAR(32) | NOT NULL, DEFAULT 'ACTIVE' | `ACTIVE`, `INACTIVE`, `UNDER_RENOVATION`, `VACANT` |
+| `ownership_status`| VARCHAR(64) | NOT NULL, DEFAULT 'PRIVATE' | `OWNED`, `OCCUPIED`, `LEASED`, `VACANT`, `MORTGAGED`, `COMMON` |
+
+*Table Constraints*:
+- `UNIQUE(floor_id, unit_number)`: Disallows duplicate unit designations on the same floor slab.
+- `CHECK(elevation_max_m > elevation_min_m)`: Guarantees positive unit vertical height.
+
+---
+
+## 6. Spatial Reference Strategy & Vertical Datums
 
 1. **Horizontal Standard (EPSG:4326 - WGS 84)**: All geometries stored in base database columns are standardized to EPSG:4326 in lon/lat coordinates.
 2. **Vertical Reference Datums**:
@@ -204,19 +260,21 @@ Authoritative 3D vertical representation and 2.5D extrusion parameters for a bui
 
 ---
 
-## 6. Entity Relationship Architecture (Phases 1-3)
+## 7. Entity Relationship Architecture (Phases 1-4 Complete)
 
 ```
 [organizations] 1 ──< [jurisdictions] 1 ──< [parcels]
-                                                │
-                                    ┌───────────┴───────────┐
-                                    ▼                       ▼
-                              [properties]            [buildings]
-                                                           │ 1
-                                                           ▼ 1
-                                             [building_3d_representations]
-                                                           │ 1
-                                                           ▼ *
-                                                     [threed_assets]
+                                                │ 1
+                                                ├──────────────┐
+                                                ▼ *            ▼ *
+                                          [properties]    [buildings]
+                                               ▲               │ 1
+                                               │ (optional)    ├─────────────────────────────┐
+                                               │               ▼ 1                           ▼ 1
+                                               │ [building_3d_representations]            [floors]
+                                               │               │ 1                           │ 1
+                                               │               ▼ *                           ▼ *
+                                               └─────── [property_units] ◄───────────────────┘
 ```
+
 

@@ -11,17 +11,22 @@ import {
   Filter,
   RefreshCw,
   Info,
+  FolderTree,
 } from 'lucide-react';
 import {
   threedApi,
   ThreeDSceneResponse,
   Building3DDetailResponse,
   Parcel3DDetailResponse,
+  CesiumFloorFeature,
+  CesiumUnitFeature,
 } from '../../api/threed';
 import { gisApi } from '../../api/gis';
 import { Jurisdiction } from '../../types';
 import { CesiumViewer } from '../../features/cesium/CesiumViewer';
 import { CesiumInfoPanel } from '../../features/cesium/CesiumInfoPanel';
+import { FloorSelector } from '../../features/cesium/FloorSelector';
+import { UnitTreeExplorer } from '../../features/cesium/UnitTreeExplorer';
 import {
   CesiumLayerControls,
   LayerConfig,
@@ -35,6 +40,8 @@ export const DigitalTwin3DPage: React.FC = () => {
 
   const buildingIdParam = searchParams.get('building_id');
   const parcelIdParam = searchParams.get('parcel_id');
+  const floorIdParam = searchParams.get('floor_id');
+  const unitIdParam = searchParams.get('unit_id');
 
   // State: Jurisdictions
   const [jurisdictions, setJurisdictions] = useState<Jurisdiction[]>([]);
@@ -47,14 +54,23 @@ export const DigitalTwin3DPage: React.FC = () => {
   // State: Selected Entities & Details
   const [selectedBuildingId, setSelectedBuildingId] = useState<string | null>(buildingIdParam);
   const [selectedParcelId, setSelectedParcelId] = useState<string | null>(parcelIdParam);
+  const [selectedFloorId, setSelectedFloorId] = useState<string | null>(floorIdParam);
+  const [selectedUnitId, setSelectedUnitId] = useState<string | null>(unitIdParam);
   const [buildingDetail, setBuildingDetail] = useState<Building3DDetailResponse | null>(null);
   const [parcelDetail, setParcelDetail] = useState<Parcel3DDetailResponse | null>(null);
   const [isLoadingDetail, setIsLoadingDetail] = useState<boolean>(false);
+
+  // Phase 4: Slicing & Vertical view controls
+  const [isExploded, setIsExploded] = useState<boolean>(false);
+  const [isIsolated, setIsIsolated] = useState<boolean>(false);
+  const [showTreeExplorer, setShowTreeExplorer] = useState<boolean>(false);
 
   // State: Layer Configuration
   const [layerConfig, setLayerConfig] = useState<LayerConfig>({
     showBuildings: true,
     showParcels: true,
+    showFloors: true,
+    showUnits: true,
     colorMode: 'height',
     basemap: 'carto_dark',
     wireframe: true,
@@ -263,6 +279,21 @@ export const DigitalTwin3DPage: React.FC = () => {
 
         {/* Right Action Controls */}
         <div className="flex items-center gap-2 pointer-events-auto">
+          {selectedBuildingId && (
+            <button
+              onClick={() => setShowTreeExplorer(!showTreeExplorer)}
+              className={`flex items-center gap-1.5 backdrop-blur-md border rounded-xl px-3.5 py-2 shadow-xl text-xs font-medium transition-all ${
+                showTreeExplorer
+                  ? 'bg-indigo-600 border-indigo-500 text-white'
+                  : 'bg-slate-900/90 border-slate-700/70 text-slate-200 hover:text-white hover:bg-slate-800'
+              }`}
+              title="Toggle Building-Floor-Unit Hierarchy Tree"
+            >
+              <FolderTree className="w-3.5 h-3.5" />
+              <span>Hierarchy Tree</span>
+            </button>
+          )}
+
           <button
             onClick={handleResetCamera}
             className="flex items-center gap-1.5 bg-slate-900/90 backdrop-blur-md border border-slate-700/70 rounded-xl px-3 py-2 shadow-xl text-xs text-slate-200 hover:text-white hover:bg-slate-800 transition-all"
@@ -289,9 +320,15 @@ export const DigitalTwin3DPage: React.FC = () => {
           sceneData={sceneData}
           selectedBuildingId={selectedBuildingId}
           selectedParcelId={selectedParcelId}
+          selectedFloorId={selectedFloorId}
+          selectedUnitId={selectedUnitId}
           layerConfig={layerConfig}
+          isExploded={isExploded}
+          isIsolated={isIsolated}
           onSelectBuilding={handleSelectBuilding}
           onSelectParcel={handleSelectParcel}
+          onSelectFloor={setSelectedFloorId}
+          onSelectUnit={setSelectedUnitId}
           onViewerReady={(viewer) => {
             viewerInstanceRef.current = viewer;
           }}
@@ -313,22 +350,57 @@ export const DigitalTwin3DPage: React.FC = () => {
         )}
 
         {/* Left Inspector Panel Overlay */}
-        <div className="absolute top-20 left-4 z-20 max-w-sm pointer-events-auto">
+        <div className="absolute top-20 left-4 z-20 max-w-sm pointer-events-auto space-y-3">
           <CesiumInfoPanel
             buildingDetail={buildingDetail}
             parcelDetail={parcelDetail}
+            selectedFloorId={selectedFloorId}
+            selectedUnitId={selectedUnitId}
             isLoading={isLoadingDetail}
             onClose={() => {
               setSelectedBuildingId(null);
               setSelectedParcelId(null);
+              setSelectedFloorId(null);
+              setSelectedUnitId(null);
               setBuildingDetail(null);
               setParcelDetail(null);
               setSearchParams({});
             }}
             onHeightUpdated={handleHeightUpdated}
             onSelectBuilding={handleSelectBuilding}
+            onSelectFloor={setSelectedFloorId}
+            onSelectUnit={setSelectedUnitId}
           />
+
+          {/* Vertical Floor Slicing / Isolation Selector */}
+          {selectedBuildingId && sceneData?.floors && sceneData.floors.filter(f => f.building_id === selectedBuildingId).length > 0 && (
+            <FloorSelector
+              floors={sceneData.floors.filter(f => f.building_id === selectedBuildingId)}
+              selectedFloorId={selectedFloorId}
+              onSelectFloor={setSelectedFloorId}
+              isExploded={isExploded}
+              onToggleExploded={setIsExploded}
+              isIsolated={isIsolated}
+              onToggleIsolated={setIsIsolated}
+            />
+          )}
         </div>
+
+        {/* Hierarchy Tree Overlay (Collapsible) */}
+        {showTreeExplorer && selectedBuildingId && (
+          <div className="absolute top-20 right-4 z-20 pointer-events-auto">
+            <UnitTreeExplorer
+              buildingReference={buildingDetail?.building.building_reference || 'Building'}
+              floors={sceneData?.floors?.filter(f => f.building_id === selectedBuildingId) || []}
+              units={sceneData?.units?.filter(u => (sceneData.floors || []).some(f => f.building_id === selectedBuildingId && f.floor_id === u.floor_id)) || []}
+              selectedFloorId={selectedFloorId}
+              selectedUnitId={selectedUnitId}
+              onSelectFloor={setSelectedFloorId}
+              onSelectUnit={setSelectedUnitId}
+              onClose={() => setShowTreeExplorer(false)}
+            />
+          </div>
+        )}
 
         {/* Right Floating Controls Overlay */}
         <div className="absolute bottom-6 right-4 z-20 flex flex-col items-end gap-3 pointer-events-auto">

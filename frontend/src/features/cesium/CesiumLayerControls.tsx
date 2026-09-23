@@ -7,6 +7,8 @@ export type BasemapMode = 'osm' | 'carto_dark' | 'carto_positron';
 export interface LayerConfig {
   showBuildings: boolean;
   showParcels: boolean;
+  showFloors: boolean;
+  showUnits: boolean;
   colorMode: ColorMode;
   basemap: BasemapMode;
   wireframe: boolean;
@@ -37,6 +39,24 @@ export const CesiumLayerControls: React.FC<Props> = ({ config, onChange }) => {
             checked={config.showBuildings}
             onChange={(e) => onChange({ ...config, showBuildings: e.target.checked })}
             className="rounded border-slate-700 bg-slate-800 text-blue-600 focus:ring-blue-500"
+          />
+        </label>
+        <label className="flex items-center justify-between p-1.5 rounded hover:bg-slate-800 cursor-pointer">
+          <span className="text-slate-200">Floor Slabs</span>
+          <input
+            type="checkbox"
+            checked={config.showFloors}
+            onChange={(e) => onChange({ ...config, showFloors: e.target.checked })}
+            className="rounded border-slate-700 bg-slate-800 text-cyan-500 focus:ring-cyan-500"
+          />
+        </label>
+        <label className="flex items-center justify-between p-1.5 rounded hover:bg-slate-800 cursor-pointer">
+          <span className="text-slate-200">Property Units</span>
+          <input
+            type="checkbox"
+            checked={config.showUnits}
+            onChange={(e) => onChange({ ...config, showUnits: e.target.checked })}
+            className="rounded border-slate-700 bg-slate-800 text-amber-500 focus:ring-amber-500"
           />
         </label>
         <label className="flex items-center justify-between p-1.5 rounded hover:bg-slate-800 cursor-pointer">

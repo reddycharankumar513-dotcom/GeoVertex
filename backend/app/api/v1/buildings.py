@@ -1,6 +1,6 @@
 import math
 import uuid
-from typing import Optional
+from typing import List, Optional
 from fastapi import APIRouter, Depends, Query, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.dependencies.auth import get_current_user, require_editor, require_officer_or_admin
@@ -13,7 +13,9 @@ from app.schemas.building import (
     BuildingUpdate,
 )
 from app.schemas.common import PaginatedResponse
+from app.schemas.floor import FloorDetailResponse
 from app.services.building_service import building_service
+from app.services.floor_service import floor_service
 
 router = APIRouter(prefix="/buildings", tags=["Building Footprint Management"])
 
@@ -141,3 +143,17 @@ async def delete_building(
         user_agent=user_agent,
     )
     return {"message": "Building footprint deleted successfully", "id": str(id)}
+
+
+@router.get(
+    "/{id}/floors",
+    response_model=List[FloorDetailResponse],
+    summary="Get all floor slabs for a building footprint",
+)
+async def get_building_floor_stack(
+    id: uuid.UUID,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    return await floor_service.get_building_floors(db=db, building_id=id)
+

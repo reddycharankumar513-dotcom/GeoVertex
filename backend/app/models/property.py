@@ -1,5 +1,5 @@
 import uuid
-from typing import Optional, TYPE_CHECKING
+from typing import Optional, List, TYPE_CHECKING
 from sqlalchemy import ForeignKey, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.database.base import Base, GUID, TimestampMixin
@@ -7,6 +7,7 @@ from app.database.base import Base, GUID, TimestampMixin
 if TYPE_CHECKING:
     from app.models.parcel import Parcel
     from app.models.user import User
+    from app.models.unit import PropertyUnit
 
 
 class Property(Base, TimestampMixin):
@@ -73,6 +74,10 @@ class Property(Base, TimestampMixin):
     parcel: Mapped["Parcel"] = relationship(
         "Parcel",
         back_populates="properties",
+    )
+    units: Mapped[List["PropertyUnit"]] = relationship(
+        "PropertyUnit",
+        back_populates="property",
     )
     creator: Mapped[Optional["User"]] = relationship(
         "User",

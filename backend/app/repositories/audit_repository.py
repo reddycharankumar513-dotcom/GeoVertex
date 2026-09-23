@@ -1,9 +1,19 @@
+import json
 import uuid
 from typing import Any, Dict, List, Optional, Tuple
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.audit import AuditEvent
 from app.repositories.base import BaseRepository
+
+
+def _sanitize_for_json(data: Any) -> Any:
+    if data is None:
+        return {}
+    try:
+        return json.loads(json.dumps(data, default=str))
+    except Exception:
+        return {}
 
 
 class AuditRepository(BaseRepository[AuditEvent]):
@@ -21,6 +31,7 @@ class AuditRepository(BaseRepository[AuditEvent]):
         user_agent: Optional[str] = None,
         details: Optional[Dict[str, Any]] = None,
     ) -> AuditEvent:
+        safe_details = _sanitize_for_json(details) if details is not None else {}
         event = AuditEvent(
             action=action,
             entity_type=entity_type,
@@ -28,7 +39,7 @@ class AuditRepository(BaseRepository[AuditEvent]):
             actor_user_id=actor_user_id,
             ip_address=ip_address,
             user_agent=user_agent,
-            details=details or {},
+            details=safe_details,
         )
         db.add(event)
         await db.flush()

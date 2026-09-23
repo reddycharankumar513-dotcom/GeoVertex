@@ -10,10 +10,12 @@ from app.models.building import BuildingFootprint
 from app.models.threed import Building3DRepresentation, ThreeDAsset
 from app.repositories.audit_repository import audit_repository
 from app.repositories.building_repository import building_repository
+from app.repositories.floor_repository import floor_repository
 from app.repositories.jurisdiction_repository import jurisdiction_repository
 from app.repositories.parcel_repository import parcel_repository
 from app.repositories.property_repository import property_repository
 from app.repositories.threed_repository import threed_repository
+from app.repositories.unit_repository import unit_repository
 from app.schemas.threed import (
     Building3DHeightUpdateRequest,
     CesiumExtrusionFeature,
@@ -115,8 +117,10 @@ class Building3DService:
         # Map parcel IDs to codes for fast lookup
         parcel_map = {p.id: p for p in parcels}
 
-        # 3. Build extruded building entities
+        # 3. Build extruded building entities, floors, and units
         building_features: List[CesiumExtrusionFeature] = []
+        floor_features: List[Dict[str, Any]] = []
+        unit_features: List[Dict[str, Any]] = []
         min_lon, min_lat, max_lon, max_lat = 180.0, 90.0, -180.0, -90.0
 
         for bldg in buildings:
@@ -125,6 +129,10 @@ class Building3DService:
 
             rep = await self.get_or_create_representation(db, bldg)
             p_code = parcel_map[bldg.parcel_id].parcel_code if (bldg.parcel_id and bldg.parcel_id in parcel_map) else None
+
+            # Query floors for this building
+            bldg_floors = await floor_repository.get_by_building(db, bldg.id, include_units=True)
+            total_units_for_bldg = sum(len(f.units) for f in bldg_floors) if bldg_floors else 0
 
             extrusion = Geometry3DEngine.generate_cesium_extrusion(
                 building_id=str(bldg.id),
@@ -142,6 +150,8 @@ class Building3DService:
                 parcel_id=str(bldg.parcel_id) if bldg.parcel_id else None,
                 parcel_code=p_code,
             )
+            extrusion["floors_count"] = len(bldg_floors)
+            extrusion["units_count"] = total_units_for_bldg
 
             # Update scene bounds
             b_box = extrusion["bbox_3d"]
@@ -151,6 +161,85 @@ class Building3DService:
             max_lat = max(max_lat, b_box[4])
 
             building_features.append(CesiumExtrusionFeature(**extrusion))
+
+            # Process 3D floor slabs and units
+            for f in bldg_floors:
+                f_geom_input = f.geometry_wkt if f.geometry_wkt else bldg.geometry_wkt
+                if not f_geom_input:
+                    continue
+                try:
+                    f_geom = GeometryEngine.parse_geometry(f_geom_input)
+                    f_rings = Geometry3DEngine.extract_polygon_rings(f_geom)
+                    f_centroid = [
+                        round(f_geom.centroid.x, 6),
+                        round(f_geom.centroid.y, 6),
+                        round(rep.base_elevation + (f.elevation_min_m + f.elevation_max_m) / 2.0, 2),
+                    ]
+                    f_bbox = Geometry3DEngine.calculate_3d_bounds(
+                        f_geom, rep.base_elevation + f.elevation_min_m, f.height_m
+                    )
+
+                    floor_features.append({
+                        "floor_id": str(f.id),
+                        "building_id": str(bldg.id),
+                        "building_reference": bldg.building_reference,
+                        "floor_number": f.floor_number,
+                        "floor_code": f.floor_code,
+                        "floor_name": f.floor_name,
+                        "floor_type": f.floor_type,
+                        "base_elevation": rep.base_elevation + f.elevation_min_m,
+                        "extruded_height": rep.base_elevation + f.elevation_max_m,
+                        "elevation_min_m": f.elevation_min_m,
+                        "elevation_max_m": f.elevation_max_m,
+                        "height_m": f.height_m,
+                        "area_sqm": f.area_sqm,
+                        "status": f.status,
+                        "centroid": f_centroid,
+                        "bbox_3d": list(f_bbox),
+                        "rings": f_rings,
+                        "units_count": len(f.units) if f.units else 0,
+                    })
+
+                    for u in (f.units or []):
+                        if not u.geometry_wkt:
+                            continue
+                        try:
+                            u_geom = GeometryEngine.parse_geometry(u.geometry_wkt)
+                            u_rings = Geometry3DEngine.extract_polygon_rings(u_geom)
+                            u_centroid = [
+                                round(u_geom.centroid.x, 6),
+                                round(u_geom.centroid.y, 6),
+                                round(rep.base_elevation + (u.elevation_min_m + u.elevation_max_m) / 2.0, 2),
+                            ]
+                            u_bbox = Geometry3DEngine.calculate_3d_bounds(
+                                u_geom, rep.base_elevation + u.elevation_min_m, u.height_m
+                            )
+
+                            unit_features.append({
+                                "unit_id": str(u.id),
+                                "floor_id": str(f.id),
+                                "building_id": str(bldg.id),
+                                "property_id": str(u.property_id) if u.property_id else None,
+                                "unit_number": u.unit_number,
+                                "unit_code": u.unit_code,
+                                "unit_type": u.unit_type,
+                                "base_elevation": rep.base_elevation + u.elevation_min_m,
+                                "extruded_height": rep.base_elevation + u.elevation_max_m,
+                                "elevation_min_m": u.elevation_min_m,
+                                "elevation_max_m": u.elevation_max_m,
+                                "height_m": u.height_m,
+                                "gross_area_sqm": u.gross_area_sqm,
+                                "net_area_sqm": u.net_area_sqm,
+                                "status": u.status,
+                                "ownership_status": u.ownership_status,
+                                "centroid": u_centroid,
+                                "bbox_3d": list(u_bbox),
+                                "rings": u_rings,
+                            })
+                        except Exception:
+                            continue
+                except Exception:
+                    continue
 
         # 4. Build parcel 2D boundaries for 3D context
         parcel_features: List[Dict[str, Any]] = []
@@ -205,9 +294,13 @@ class Building3DService:
             scene=scene_meta,
             buildings=building_features,
             parcels=parcel_features,
+            floors=floor_features,
+            units=unit_features,
             metadata={
                 "total_buildings": len(building_features),
                 "total_parcels": len(parcel_features),
+                "total_floors": len(floor_features),
+                "total_units": len(unit_features),
                 "representation_format": "CESIUM_EXTRUSION_LOD1",
                 "lod": "LOD1",
             },
@@ -290,6 +383,34 @@ class Building3DService:
             } if parcel else None,
             "properties": properties,
             "cesium_extrusion": extrusion,
+            "floors": [
+                {
+                    "id": str(f.id),
+                    "floor_number": f.floor_number,
+                    "floor_code": f.floor_code,
+                    "floor_name": f.floor_name,
+                    "floor_type": f.floor_type,
+                    "elevation_min_m": f.elevation_min_m,
+                    "elevation_max_m": f.elevation_max_m,
+                    "height_m": f.height_m,
+                    "area_sqm": f.area_sqm,
+                    "units": [
+                        {
+                            "id": str(u.id),
+                            "unit_number": u.unit_number,
+                            "unit_code": u.unit_code,
+                            "unit_type": u.unit_type,
+                            "gross_area_sqm": u.gross_area_sqm,
+                            "net_area_sqm": u.net_area_sqm,
+                            "status": u.status,
+                            "ownership_status": u.ownership_status,
+                            "property_id": str(u.property_id) if u.property_id else None,
+                        }
+                        for u in (f.units or [])
+                    ],
+                }
+                for f in (await floor_repository.get_by_building(db, building_id, include_units=True))
+            ],
         }
 
     async def update_building_height(
@@ -466,11 +587,71 @@ class Building3DService:
             "extruded_height": rep.base_elevation + rep.height,
         }
 
+        # Resolve Floor and Unit by vertical altitude and horizontal coordinate
+        floor_info = None
+        unit_info = None
+        floors = await floor_repository.get_by_building(db, found_building.id, include_units=True)
+
+        altitude = height
+        for f in floors:
+            f_min_elev = rep.base_elevation + f.elevation_min_m
+            f_max_elev = rep.base_elevation + f.elevation_max_m
+            # If altitude provided, test vertical slab intersection; otherwise take ground floor
+            if altitude is None or (f_min_elev <= altitude <= f_max_elev) or (altitude <= rep.base_elevation and f.floor_number == 0):
+                floor_info = {
+                    "id": str(f.id),
+                    "floor_number": f.floor_number,
+                    "floor_code": f.floor_code,
+                    "floor_name": f.floor_name,
+                    "floor_type": f.floor_type,
+                    "elevation_min_m": f.elevation_min_m,
+                    "elevation_max_m": f.elevation_max_m,
+                    "height_m": f.height_m,
+                    "area_sqm": f.area_sqm,
+                    "units_count": len(f.units) if f.units else 0,
+                }
+
+                # Test units on this floor
+                for u in (f.units or []):
+                    if not u.geometry_wkt:
+                        continue
+                    try:
+                        u_geom = GeometryEngine.parse_geometry(u.geometry_wkt)
+                        if u_geom.contains(pt) or u_geom.distance(pt) < 0.00001:
+                            unit_info = {
+                                "id": str(u.id),
+                                "unit_number": u.unit_number,
+                                "unit_code": u.unit_code,
+                                "unit_type": u.unit_type,
+                                "gross_area_sqm": u.gross_area_sqm,
+                                "net_area_sqm": u.net_area_sqm,
+                                "elevation_min_m": u.elevation_min_m,
+                                "elevation_max_m": u.elevation_max_m,
+                                "status": u.status,
+                                "ownership_status": u.ownership_status,
+                            }
+                            if u.property_id:
+                                u_prop = await property_repository.get_by_id(db, u.property_id)
+                                if u_prop:
+                                    property_info = {
+                                        "id": str(u_prop.id),
+                                        "property_reference": u_prop.property_reference,
+                                        "property_type": u_prop.property_type,
+                                        "address": u_prop.address,
+                                        "status": u_prop.status,
+                                    }
+                            break
+                    except Exception:
+                        continue
+                break
+
         return ThreeDIdentifyResponse(
             building=building_info,
             parcel=parcel_info,
             property=property_info,
             jurisdiction=jurisdiction_info,
+            floor=floor_info,
+            unit=unit_info,
         )
 
     async def get_parcel_3d_context(self, db: AsyncSession, parcel_id: uuid.UUID) -> Dict[str, Any]:

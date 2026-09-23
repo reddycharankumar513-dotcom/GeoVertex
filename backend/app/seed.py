@@ -1,5 +1,6 @@
 import asyncio
 import uuid
+from typing import Optional
 from app.core.logging import logger
 from app.core.security import get_password_hash
 from app.database.base import Base
@@ -12,12 +13,17 @@ from app.models.organization import Organization
 from app.models.parcel import Parcel
 from app.models.property import Property
 from app.models.user import User, UserRole
+from app.models.floor import Floor
+from app.models.unit import PropertyUnit
 from app.repositories.building_repository import building_repository
+from app.repositories.floor_repository import floor_repository
 from app.repositories.organization_repository import organization_repository, jurisdiction_repository
 from app.repositories.parcel_repository import parcel_repository
 from app.repositories.property_repository import property_repository
 from app.repositories.threed_repository import threed_repository
+from app.repositories.unit_repository import unit_repository
 from app.repositories.user_repository import user_repository
+from shapely.geometry import box
 
 
 DEMO_USERS = [
@@ -486,9 +492,12 @@ async def seed_database():
                         status="ACTIVE",
                     )
                     logger.info(f"    +-- Seeded 3D Extrusion: {rep_3d.height}m ({rep_3d.height_source})")
+
+                    # Seed Phase 4 Floors & Units
+                    await seed_floors_and_units_for_building(db, bld, property_obj.id if property_obj else None)
             else:
                 logger.info(f"Parcel exists: {existing_parcel.parcel_code}")
-                # Ensure existing buildings have 3D representations
+                # Ensure existing buildings have 3D representations, floors, and units
                 bld_data = p_data.get("building")
                 if bld_data:
                     existing_bld = await building_repository.get_by_reference(db, bld_data["ref"])
@@ -509,8 +518,112 @@ async def seed_database():
                         )
                         logger.info(f"    +-- Verified 3D Extrusion: {existing_bld.building_reference} -> {rep_3d.height}m")
 
+                        # Seed Phase 4 Floors & Units
+                        prop = await property_repository.get_by_reference(db, p_data.get("property", {}).get("ref", ""))
+                        await seed_floors_and_units_for_building(db, existing_bld, prop.id if prop else None)
+
         await db.commit()
-    logger.info("Database seeding completed successfully with Phase 2 Cadastral GIS & Phase 3 3D Digital Twin Data!")
+    logger.info("Database seeding completed successfully with Phase 2 Cadastre, Phase 3 3D Twin & Phase 4 Floor/Unit Data!")
+
+
+async def seed_floors_and_units_for_building(db, building: BuildingFootprint, property_id: Optional[uuid.UUID] = None):
+    """Seed authoritative multi-level floor stack and subdivided property units for a building."""
+    if not building.geometry_wkt:
+        return
+
+    b_geom = GeometryEngine.parse_geometry(building.geometry_wkt)
+    min_x, min_y, max_x, max_y = b_geom.bounds
+    mid_x = (min_x + max_x) / 2.0
+
+    # East and West sub-boxes for disjoint unit geometries
+    west_box = box(min_x, min_y, mid_x, max_y)
+    east_box = box(mid_x, min_y, max_x, max_y)
+
+    u1_geom = b_geom.intersection(west_box)
+    u2_geom = b_geom.intersection(east_box)
+
+    u1_wkt = GeometryEngine.to_wkt(u1_geom) if not u1_geom.is_empty else building.geometry_wkt
+    u2_wkt = GeometryEngine.to_wkt(u2_geom) if not u2_geom.is_empty else building.geometry_wkt
+
+    u1_area = GeometryEngine.calculate_geodesic_area(u1_geom) if not u1_geom.is_empty else 100.0
+    u2_area = GeometryEngine.calculate_geodesic_area(u2_geom) if not u2_geom.is_empty else 100.0
+
+    floor_configs = [
+        {"num": 0, "name": "Ground Floor", "type": "COMMERCIAL", "elev_min": 0.0, "elev_max": 4.0, "u_type": "RETAIL"},
+        {"num": 1, "name": "Level 1", "type": "COMMERCIAL", "elev_min": 4.0, "elev_max": 7.5, "u_type": "OFFICE"},
+        {"num": 2, "name": "Level 2", "type": "COMMERCIAL", "elev_min": 7.5, "elev_max": 11.0, "u_type": "OFFICE"},
+        {"num": 3, "name": "Level 3", "type": "RESIDENTIAL", "elev_min": 11.0, "elev_max": 15.0, "u_type": "APARTMENT"},
+    ]
+
+    for fc in floor_configs:
+        f_code = f"{building.building_reference}-F{fc['num']}"
+        existing_floor = await floor_repository.get_by_code(db, f_code)
+        if not existing_floor:
+            f_data = {
+                "building_id": building.id,
+                "floor_number": fc["num"],
+                "floor_code": f_code,
+                "floor_name": fc["name"],
+                "floor_type": fc["type"],
+                "elevation_min_m": fc["elev_min"],
+                "elevation_max_m": fc["elev_max"],
+                "height_m": round(fc["elev_max"] - fc["elev_min"], 2),
+                "area_sqm": building.area,
+                "geometry": building.geometry_wkt,
+                "geometry_wkt": building.geometry_wkt,
+                "confidence": 1.0,
+                "status": "ACTIVE",
+                "source": "DEVELOPMENT_SEED_DATA",
+            }
+            floor = await floor_repository.create(db, f_data)
+            logger.info(f"      +-- Seeded Floor: {floor.floor_code} ({floor.height_m}m)")
+        else:
+            floor = existing_floor
+
+        # Seed 2 units per floor
+        u1_code = f"{f_code}-U{fc['num']}01"
+        existing_u1 = await unit_repository.get_by_code(db, u1_code)
+        if not existing_u1:
+            u1_data = {
+                "floor_id": floor.id,
+                "building_id": building.id,
+                "property_id": property_id,
+                "unit_number": f"{fc['num']}01",
+                "unit_code": u1_code,
+                "unit_type": fc["u_type"],
+                "gross_area_sqm": u1_area,
+                "net_area_sqm": round(u1_area * 0.85, 2),
+                "elevation_min_m": fc["elev_min"],
+                "elevation_max_m": fc["elev_max"],
+                "height_m": round(fc["elev_max"] - fc["elev_min"], 2),
+                "geometry": u1_wkt,
+                "geometry_wkt": u1_wkt,
+                "status": "ACTIVE",
+                "ownership_status": "PRIVATE",
+            }
+            await unit_repository.create(db, u1_data)
+
+        u2_code = f"{f_code}-U{fc['num']}02"
+        existing_u2 = await unit_repository.get_by_code(db, u2_code)
+        if not existing_u2:
+            u2_data = {
+                "floor_id": floor.id,
+                "building_id": building.id,
+                "property_id": property_id,
+                "unit_number": f"{fc['num']}02",
+                "unit_code": u2_code,
+                "unit_type": fc["u_type"],
+                "gross_area_sqm": u2_area,
+                "net_area_sqm": round(u2_area * 0.85, 2),
+                "elevation_min_m": fc["elev_min"],
+                "elevation_max_m": fc["elev_max"],
+                "height_m": round(fc["elev_max"] - fc["elev_min"], 2),
+                "geometry": u2_wkt,
+                "geometry_wkt": u2_wkt,
+                "status": "ACTIVE",
+                "ownership_status": "PRIVATE",
+            }
+            await unit_repository.create(db, u2_data)
 
 
 if __name__ == "__main__":

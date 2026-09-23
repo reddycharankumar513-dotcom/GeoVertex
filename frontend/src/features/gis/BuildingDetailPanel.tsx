@@ -1,7 +1,8 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { X, Building2, MapPin, Layers, Maximize2, ArrowUp, Calendar, Box } from 'lucide-react';
+import { X, Building2, MapPin, Layers, Maximize2, ArrowUp, Calendar, Box, Home } from 'lucide-react';
 import { Building } from '../../types';
+import { floorsApi, FloorResponse } from '../../api/floors';
 
 interface BuildingDetailPanelProps {
   building: Building;
@@ -15,6 +16,31 @@ export const BuildingDetailPanel: React.FC<BuildingDetailPanelProps> = ({
   onSelectParcel,
 }) => {
   const navigate = useNavigate();
+  const [floors, setFloors] = useState<FloorResponse[]>([]);
+  const [isLoadingFloors, setIsLoadingFloors] = useState(false);
+
+  useEffect(() => {
+    let isMounted = true;
+    const loadFloors = async () => {
+      try {
+        setIsLoadingFloors(true);
+        const data = await floorsApi.listByBuilding(building.id);
+        if (isMounted) {
+          setFloors(data || []);
+        }
+      } catch (err) {
+        console.error('Failed to load building floors:', err);
+      } finally {
+        if (isMounted) {
+          setIsLoadingFloors(false);
+        }
+      }
+    };
+    loadFloors();
+    return () => {
+      isMounted = false;
+    };
+  }, [building.id]);
   return (
     <div className="bg-slate-900/95 border border-slate-800 rounded-xl shadow-2xl backdrop-blur-md w-96 max-h-[85vh] flex flex-col overflow-hidden text-slate-200">
       {/* Header */}
@@ -106,6 +132,55 @@ export const BuildingDetailPanel: React.FC<BuildingDetailPanelProps> = ({
             </div>
           </div>
         )}
+
+        {/* Floors & Vertical Units (Phase 4) */}
+        <div className="bg-slate-800/40 p-3 rounded-lg border border-slate-800 space-y-2.5">
+          <div className="flex items-center justify-between">
+            <span className="text-slate-300 font-semibold flex items-center gap-1.5">
+              <Layers className="w-3.5 h-3.5 text-cyan-400" />
+              <span>Vertical Floors ({floors.length})</span>
+            </span>
+            <span className="text-[10px] text-cyan-400 font-mono">
+              {floors.length > 0 ? `${floors[0].elevation_min_m}m - ${floors[floors.length - 1].elevation_max_m}m` : 'Unassigned'}
+            </span>
+          </div>
+
+          {isLoadingFloors ? (
+            <div className="text-[11px] text-slate-500 py-1 italic">Loading floors...</div>
+          ) : floors.length === 0 ? (
+            <div className="text-[11px] text-slate-500 py-1 italic">No vertical floors recorded yet</div>
+          ) : (
+            <div className="space-y-1.5 max-h-40 overflow-y-auto pr-1">
+              {[...floors]
+                .sort((a, b) => b.floor_number - a.floor_number)
+                .map((f) => (
+                  <div
+                    key={f.id}
+                    className="p-2 rounded bg-slate-900/80 border border-slate-700/60 flex items-center justify-between text-[11px]"
+                  >
+                    <div className="flex items-center gap-1.5">
+                      <span className="w-5 h-5 rounded bg-slate-800 text-cyan-400 font-mono font-semibold flex items-center justify-center text-[10px]">
+                        {f.floor_number >= 0 ? `L${f.floor_number}` : `B${Math.abs(f.floor_number)}`}
+                      </span>
+                      <div>
+                        <div className="font-medium text-slate-200">{f.floor_name || `Floor ${f.floor_number}`}</div>
+                        <div className="text-[10px] text-slate-400 font-mono">
+                          {f.elevation_min_m.toFixed(1)}–{f.elevation_max_m.toFixed(1)}m (Δ{f.height_m.toFixed(1)}m)
+                        </div>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => navigate(`/digital-twin?building_id=${building.id}&floor_id=${f.id}`)}
+                      className="px-2 py-0.5 rounded bg-cyan-950 text-cyan-300 border border-cyan-800 text-[10px] hover:bg-cyan-900 transition-colors"
+                    >
+                      3D Slab
+                    </button>
+                  </div>
+                ))}
+            </div>
+          )}
+        </div>
 
         {/* Source Tracking */}
         <div className="space-y-1.5 bg-slate-800/40 p-3 rounded-lg border border-slate-800">

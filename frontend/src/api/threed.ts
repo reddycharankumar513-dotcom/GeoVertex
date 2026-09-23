@@ -23,6 +23,53 @@ export interface CesiumExtrusionFeature {
     exterior: number[];
     holes: number[][];
   }[];
+  floors_count?: number;
+  units_count?: number;
+}
+
+export interface CesiumFloorFeature {
+  floor_id: string;
+  building_id: string;
+  floor_number: number;
+  floor_code: string;
+  floor_name?: string | null;
+  floor_type: string;
+  base_elevation: number;
+  elevation_min_m: number;
+  elevation_max_m: number;
+  height_m: number;
+  area_sqm?: number | null;
+  status: string;
+  centroid: [number, number, number];
+  bbox_3d: [number, number, number, number, number, number];
+  rings: {
+    exterior: number[];
+    holes: number[][];
+  }[];
+}
+
+export interface CesiumUnitFeature {
+  unit_id: string;
+  floor_id: string;
+  property_id?: string | null;
+  unit_number: string;
+  unit_code: string;
+  unit_type: string;
+  use_category: string;
+  base_elevation: number;
+  elevation_min_m: number;
+  elevation_max_m: number;
+  height_m: number;
+  gross_area_sqm: number;
+  net_area_sqm?: number | null;
+  status: string;
+  ownership_status: string;
+  centroid: [number, number, number];
+  bbox_3d: [number, number, number, number, number, number];
+  rings: {
+    exterior: number[];
+    holes: number[][];
+  }[];
 }
 
 export interface SceneMetadata {
@@ -41,9 +88,13 @@ export interface ThreeDSceneResponse {
   scene: SceneMetadata;
   buildings: CesiumExtrusionFeature[];
   parcels: any[];
+  floors?: CesiumFloorFeature[];
+  units?: CesiumUnitFeature[];
   metadata: {
     total_buildings: number;
     total_parcels: number;
+    total_floors?: number;
+    total_units?: number;
     representation_format: string;
     lod: string;
   };
@@ -95,6 +146,28 @@ export interface Building3DDetailResponse {
     status: string;
   }>;
   cesium_extrusion: CesiumExtrusionFeature;
+  floors?: Array<{
+    id: string;
+    floor_number: number;
+    floor_code: string;
+    floor_name?: string | null;
+    floor_type: string;
+    elevation_min_m: number;
+    elevation_max_m: number;
+    height_m: number;
+    area_sqm?: number | null;
+    units: Array<{
+      id: string;
+      unit_number: string;
+      unit_code: string;
+      unit_type: string;
+      gross_area_sqm: number;
+      net_area_sqm?: number | null;
+      status: string;
+      ownership_status: string;
+      property_id?: string | null;
+    }>;
+  }>;
 }
 
 export interface Parcel3DDetailResponse {
@@ -117,6 +190,30 @@ export interface Parcel3DDetailResponse {
 }
 
 export interface ThreeDIdentifyResponse {
+  unit?: {
+    id: string;
+    unit_number: string;
+    unit_code: string;
+    unit_type: string;
+    gross_area_sqm: number;
+    net_area_sqm?: number | null;
+    elevation_min_m: number;
+    elevation_max_m: number;
+    status: string;
+    ownership_status: string;
+  };
+  floor?: {
+    id: string;
+    floor_number: number;
+    floor_code: string;
+    floor_name?: string | null;
+    floor_type: string;
+    elevation_min_m: number;
+    elevation_max_m: number;
+    height_m: number;
+    area_sqm?: number | null;
+    units_count: number;
+  };
   building?: {
     id: string;
     building_reference: string;

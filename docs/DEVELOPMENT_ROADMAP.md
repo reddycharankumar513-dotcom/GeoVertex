@@ -16,7 +16,7 @@ GeoVertex is engineered using a modular, phase-gated methodology. Each phase pro
 | **Phase 1** | **Platform Foundation** | Monorepo, PostGIS DB, Auth, JWT, RBAC, Core API, React Shell, Docker, Tests | **COMPLETED** |
 | **Phase 2** | **Property & Parcel 2D GIS** | 2D Cadastral Parcels, Properties, Buildings, PostGIS/Shapely Geodesics, GIS Ingest/Export, Interactive Map | **COMPLETED** |
 | **Phase 3** | **3D Digital Twin Core** | CesiumJS integration, 2.5D building extrusion, vertical metadata, 2D/3D dual-viewport sync, 3D measurement | **COMPLETED** |
-| Phase 4 | Building, Floor & Unit Hierarchy | Vertical property structures, PointZ/PolygonZ, units, parent-child relations | Planned |
+| **Phase 4** | **Building, Floor & Unit Hierarchy** | Vertical property structures, floor elevation slicing, unit spatial subdivisions, 3D hierarchy explorer, topological clash validation | **COMPLETED** |
 | Phase 5 | Surveyor Workflow & Field Ingestion | Survey projects, GNSS point capture, image/point cloud upload, field notes | Planned |
 | Phase 6 | AI Building & Floor Extraction | Modular U-Net / Mask R-CNN segmentation, point-cloud height slice analysis | Planned |
 | Phase 7 | Topology Validation Engine | GEOS/Shapely spatial rule validation, gap/overlap/crossing conflict detection | Planned |
@@ -150,11 +150,58 @@ A phase cannot be marked complete without meeting all criteria:
 
 ---
 
-## 5. Phase Transition Rules
+## 5. Phase 4: Building, Floor & Unit Hierarchy (Detailed Specification)
 
-1. **No Leakage**: Features designated for Phase 4+ (building floor/unit vertical mapping, PointZ/PolygonZ unit hierarchy, LiDAR point clouds, AI building extraction, ULPIN) must not be simulated with hardcoded mocks or dummy buttons.
-2. **Backward Compatibility**: Subsequent phases must never break the foundation established in Phases 1, 2, and 3.
+### 5.1 Scope & Objectives
+1. **Hierarchical 3D Cadastral Property Model**:
+   - Establish parent-child relational link: `Parcel (2D)` $\rightarrow$ `Legal Property` $\rightarrow$ `Building Footprint` $\rightarrow$ `Floors (Z-min..Z-max)` $\rightarrow$ `Property Units (subdivided unit prisms)` $\rightarrow$ `3D Cesium Digital Twin`.
+   - `Floor` relational entity tracking vertical elevations (`elevation_min_m`, `elevation_max_m`), height, area ($m^2$), floor sequence number, and horizontal polygon boundary.
+   - `PropertyUnit` relational entity tracking unit volume prism bounds, gross/net area, unit type (`RESIDENTIAL`, `COMMERCIAL`, `OFFICE`, etc.), ownership type (`FREEHOLD`, `CONDOMINIUM`, etc.), floor reference, and optional direct legal property attachment.
+2. **Topological & Vertical Validation Engine**:
+   - Vertical span sanity: enforce $Z_{max} > Z_{min}$ and strict positive thickness.
+   - Stacking clash detection: prevent overlapping elevation intervals among floors of the same building.
+   - Horizontal boundary containment: floors must be topologically within building footprint; units must be within floor footprint.
+   - Unit interior disjointness: horizontal polygons of units on the same floor slab must not overlap ($area(A \cap B) = 0$).
+3. **Comprehensive Floor & Unit REST APIs**:
+   - Floor CRUD and building floor stack listing (`/api/v1/floors`, `/api/v1/buildings/{id}/floors`).
+   - Unit CRUD and floor unit listing (`/api/v1/units`, `/api/v1/floors/{id}/units`).
+   - Full 3D building hierarchy tree endpoint (`/api/v1/buildings/{id}/hierarchy`).
+   - Updated 3D scene streaming returning extruded floor slabs and unit prisms (`/api/v1/3d/scene`).
+4. **Interactive 3D Hierarchy Frontend & CesiumJS Slicing**:
+   - Vertical `FloorSelector` widget for floor-by-floor navigation and isolated slab view.
+   - 3D exploded view mode vertically separating stacked floor slabs with animation offset.
+   - Collapsible `UnitTreeExplorer` displaying the complete Building $\rightarrow$ Floor $\rightarrow$ Unit hierarchy tree with live search and ownership filtering.
+   - 3D entity picking for individual floor slabs and property unit prisms in Cesium viewer.
+   - 2D Cadastre panel integration showing floor levels and direct "3D Slab" links.
+5. **RBAC & Spatial Audit Logging**:
+   - Read permissions for all authenticated users; mutations restricted to `ADMIN`, `GOVERNMENT_OFFICER`, and `SURVEYOR`.
+   - Audit logging for floor and unit creation, updates, and deletions (`FLOOR_CREATED`, `FLOOR_UPDATED`, `FLOOR_DELETED`, `UNIT_CREATED`, `UNIT_UPDATED`, `UNIT_DELETED`).
+
+### 5.2 Phase 4 Phase-Gate Criteria
+- [x] Database migration `004_phase4_floors_units` executes cleanly (`alembic upgrade head`).
+- [x] Dual-dialect support for PostgreSQL/PostGIS and SQLite SafeGeometry.
+- [x] Vertical elevation non-clashing checks and floor stacking continuity verified.
+- [x] Horizontal footprint containment and unit interior non-overlap validation enforced.
+- [x] Floor REST API endpoints fully operational with pagination, sorting, and filtering.
+- [x] Property Unit REST API endpoints operational with legal property cross-referencing.
+- [x] Hierarchical tree API endpoint returning nested building-floor-unit structures.
+- [x] Interactive 3D Cesium floor selector, floor isolation, and exploded stack view operational.
+- [x] Interactive Unit Tree Explorer with real-time search, unit selection, and camera zoom.
+- [x] RBAC enforcement verified (Citizen read-only, Editor full floor/unit mutation).
+- [x] Comprehensive security and spatial audit logging for all floor and unit operations.
+- [x] Automated backend tests pass 100% (56/56 passed across all suites).
+- [x] Automated frontend unit tests pass 100% (15/15 passed).
+- [x] Automated end-to-end Phase 4 demo script passes 100% (11/11 suites passed).
+- [x] Production build passes cleanly (`tsc && vite build` with 0 errors).
+- [x] Both backend and frontend running live on localhost (`http://127.0.0.1:8000`, `http://127.0.0.1:5173`).
+
+---
+
+## 6. Phase Transition Rules
+
+1. **No Leakage**: Features designated for Phase 5+ (surveyor field mobile ingestion, point clouds, AI building segmentation, LiDAR extraction, ULPIN) must not be simulated with hardcoded mocks or dummy buttons.
+2. **Backward Compatibility**: Subsequent phases must never break the foundation established in Phases 1, 2, 3, and 4.
 3. **Database Integrity**: All future schema modifications must occur strictly via versioned Alembic migration scripts.
-4. **Authoritative Gate**: Advancement to Phase 4 requires explicit developer/stakeholder sign-off on the Phase 3 Completion Report.
+4. **Authoritative Gate**: Advancement to Phase 5 requires explicit developer/stakeholder sign-off on the Phase 4 Completion Report.
 
 

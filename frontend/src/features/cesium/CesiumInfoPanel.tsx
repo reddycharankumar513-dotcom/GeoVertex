@@ -18,19 +18,27 @@ import { useNavigate } from 'react-router-dom';
 interface Props {
   buildingDetail: Building3DDetailResponse | null;
   parcelDetail: Parcel3DDetailResponse | null;
+  selectedFloorId?: string | null;
+  selectedUnitId?: string | null;
   isLoading: boolean;
   onClose: () => void;
   onHeightUpdated?: (buildingId: string, newHeight: number, newBaseElevation: number) => void;
   onSelectBuilding?: (buildingId: string) => void;
+  onSelectFloor?: (floorId: string | null) => void;
+  onSelectUnit?: (unitId: string | null) => void;
 }
 
 export const CesiumInfoPanel: React.FC<Props> = ({
   buildingDetail,
   parcelDetail,
+  selectedFloorId = null,
+  selectedUnitId = null,
   isLoading,
   onClose,
   onHeightUpdated,
   onSelectBuilding,
+  onSelectFloor,
+  onSelectUnit,
 }) => {
   const { user } = useAuth();
   const navigate = useNavigate();
@@ -334,6 +342,84 @@ export const CesiumInfoPanel: React.FC<Props> = ({
                   <div className="text-slate-400 mt-0.5 truncate">{prop.address}</div>
                 </div>
               ))}
+            </div>
+          </div>
+        )}
+
+        {/* Vertical Hierarchy: Floors & Subdivided Units (Phase 4) */}
+        {buildingDetail.floors && buildingDetail.floors.length > 0 && (
+          <div className="border-t border-slate-700/60 pt-3 space-y-2 text-xs">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-1.5 text-slate-300 font-semibold">
+                <Layers className="w-3.5 h-3.5 text-cyan-400" />
+                <span>Vertical Floors & Units ({buildingDetail.floors.length})</span>
+              </div>
+              <span className="text-[10px] text-slate-400 font-mono">
+                {buildingDetail.floors.reduce((acc, f) => acc + (f.units?.length || 0), 0)} Units
+              </span>
+            </div>
+
+            <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
+              {[...buildingDetail.floors]
+                .sort((a, b) => b.floor_number - a.floor_number)
+                .map((flr) => {
+                  const isFloorActive = selectedFloorId === flr.id;
+                  return (
+                    <div
+                      key={flr.id}
+                      className={`p-2 rounded-lg border transition-all text-[11px] ${
+                        isFloorActive
+                          ? 'bg-cyan-950/70 border-cyan-500/70 text-cyan-200'
+                          : 'bg-slate-800/40 hover:bg-slate-800/70 border-slate-700/40 text-slate-300'
+                      }`}
+                    >
+                      <div
+                        className="flex items-center justify-between cursor-pointer"
+                        onClick={() => onSelectFloor && onSelectFloor(isFloorActive ? null : flr.id)}
+                      >
+                        <div className="flex items-center gap-1.5 font-medium">
+                          <span className="px-1.5 py-0.5 rounded bg-slate-900 font-mono text-[10px] text-cyan-400 border border-slate-700">
+                            {flr.floor_number >= 0 ? `L${flr.floor_number}` : `B${Math.abs(flr.floor_number)}`}
+                          </span>
+                          <span>{flr.floor_name || `Floor ${flr.floor_number}`}</span>
+                        </div>
+                        <div className="flex items-center gap-1.5 text-[10px] text-slate-400 font-mono">
+                          <span>{flr.elevation_min_m.toFixed(1)}–{flr.elevation_max_m.toFixed(1)}m</span>
+                          <span>·</span>
+                          <span>{flr.units?.length || 0}u</span>
+                        </div>
+                      </div>
+
+                      {/* Nested unit chips */}
+                      {flr.units && flr.units.length > 0 && (
+                        <div className="mt-1.5 pt-1.5 border-t border-slate-700/30 flex flex-wrap gap-1">
+                          {flr.units.map((u) => {
+                            const isUnitActive = selectedUnitId === u.id;
+                            return (
+                              <button
+                                key={u.id}
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  if (onSelectUnit) onSelectUnit(isUnitActive ? null : u.id);
+                                  if (onSelectFloor) onSelectFloor(flr.id);
+                                }}
+                                className={`px-2 py-0.5 rounded text-[10px] font-mono border transition-colors flex items-center gap-1 ${
+                                  isUnitActive
+                                    ? 'bg-amber-500 text-slate-950 border-amber-400 font-semibold'
+                                    : 'bg-slate-900/80 hover:bg-slate-700 text-slate-300 border-slate-700/60'
+                                }`}
+                              >
+                                <span>{u.unit_number}</span>
+                                <span className="text-[9px] opacity-75">({u.gross_area_sqm.toFixed(0)}m²)</span>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
             </div>
           </div>
         )}

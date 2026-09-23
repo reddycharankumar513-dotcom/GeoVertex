@@ -8,6 +8,8 @@ if TYPE_CHECKING:
     from app.models.parcel import Parcel
     from app.models.user import User
     from app.models.threed import Building3DRepresentation, ThreeDAsset
+    from app.models.floor import Floor
+    from app.models.unit import PropertyUnit
 
 
 class BuildingFootprint(Base, TimestampMixin):
@@ -98,6 +100,17 @@ class BuildingFootprint(Base, TimestampMixin):
     )
     assets_3d: Mapped[List["ThreeDAsset"]] = relationship(
         "ThreeDAsset",
+        back_populates="building",
+        cascade="all, delete-orphan",
+    )
+    floors: Mapped[List["Floor"]] = relationship(
+        "Floor",
+        back_populates="building",
+        cascade="all, delete-orphan",
+        order_by="Floor.floor_number",
+    )
+    units: Mapped[List["PropertyUnit"]] = relationship(
+        "PropertyUnit",
         back_populates="building",
         cascade="all, delete-orphan",
     )

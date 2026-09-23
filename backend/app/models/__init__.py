@@ -8,6 +8,8 @@ from app.models.parcel import Parcel
 from app.models.property import Property
 from app.models.building import BuildingFootprint
 from app.models.threed import Building3DRepresentation, ThreeDAsset
+from app.models.floor import Floor
+from app.models.unit import PropertyUnit
 
 __all__ = [
     "Base",
@@ -22,5 +24,7 @@ __all__ = [
     "BuildingFootprint",
     "Building3DRepresentation",
     "ThreeDAsset",
+    "Floor",
+    "PropertyUnit",
 ]
 

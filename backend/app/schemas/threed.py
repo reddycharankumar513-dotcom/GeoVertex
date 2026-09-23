@@ -53,6 +53,8 @@ class CesiumExtrusionFeature(BaseModel):
     centroid: List[float]
     bbox_3d: List[float]
     rings: List[Dict[str, Any]]
+    floors_count: int = 0
+    units_count: int = 0
 
 
 class SceneMetadata(BaseModel):
@@ -68,10 +70,14 @@ class ThreeDSceneResponse(BaseModel):
     scene: SceneMetadata
     buildings: List[CesiumExtrusionFeature]
     parcels: List[Dict[str, Any]]
+    floors: List[Dict[str, Any]] = Field(default_factory=list)
+    units: List[Dict[str, Any]] = Field(default_factory=list)
     metadata: Dict[str, Any] = Field(default_factory=dict)
 
 
 class ThreeDIdentifyResponse(BaseModel):
+    unit: Optional[Dict[str, Any]] = None
+    floor: Optional[Dict[str, Any]] = None
     building: Optional[Dict[str, Any]] = None
     parcel: Optional[Dict[str, Any]] = None
     property: Optional[Dict[str, Any]] = None

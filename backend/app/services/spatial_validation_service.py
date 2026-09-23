@@ -4,8 +4,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.gis.geometry import GeometryEngine, ValidationResult, ValidationErrorItem, ValidationWarningItem
 from app.models.jurisdiction import Jurisdiction
 from app.models.parcel import Parcel
+from app.repositories.building_repository import building_repository
+from app.repositories.floor_repository import floor_repository
 from app.repositories.jurisdiction_repository import jurisdiction_repository
 from app.repositories.parcel_repository import parcel_repository
+from app.repositories.unit_repository import unit_repository
 import shapely
 
 
@@ -270,6 +273,215 @@ class SpatialValidationService:
             )
 
         return warnings
+
+    async def validate_floor_candidate(
+        self,
+        db: AsyncSession,
+        building_id: uuid.UUID,
+        floor_number: int,
+        elevation_min_m: float,
+        elevation_max_m: float,
+        geometry_input: Optional[Union[Dict[str, Any], str]] = None,
+        current_floor_id: Optional[uuid.UUID] = None,
+        source_srid: int = 4326,
+    ) -> ValidationResult:
+        """Validate floor slab vertical elevation stacking and footprint containment."""
+        errors: List[ValidationErrorItem] = []
+        warnings: List[ValidationWarningItem] = []
+
+        # 1. Elevation bounds check
+        if elevation_min_m >= elevation_max_m:
+            errors.append(
+                ValidationErrorItem(
+                    code="INVALID_ELEVATION_BOUNDS",
+                    message=f"Floor elevation min ({elevation_min_m}m) must be strictly less than elevation max ({elevation_max_m}m)",
+                )
+            )
+        elif (elevation_max_m - elevation_min_m) < 0.1:
+            errors.append(
+                ValidationErrorItem(
+                    code="MINIMUM_HEIGHT_VIOLATION",
+                    message="Floor slab vertical thickness must be at least 0.10 meters",
+                )
+            )
+
+        # 2. Building existence & footprint containment check
+        bldg = await building_repository.get_by_id(db, building_id)
+        if not bldg:
+            errors.append(
+                ValidationErrorItem(
+                    code="BUILDING_NOT_FOUND",
+                    message=f"Parent building with ID '{building_id}' does not exist",
+                )
+            )
+        elif geometry_input:
+            base_res = GeometryEngine.validate_geometry(geometry_input, expected_type="POLYGON", source_srid=source_srid)
+            errors.extend(base_res.errors)
+            warnings.extend(base_res.warnings)
+
+            if base_res.valid and bldg.geometry_wkt:
+                try:
+                    f_geom = GeometryEngine.parse_geometry(geometry_input, source_srid=source_srid)
+                    b_geom = GeometryEngine.parse_geometry(bldg.geometry_wkt)
+                    is_covered, outside_area = GeometryEngine.check_containment(f_geom, b_geom)
+                    if not is_covered and outside_area > 0.5:
+                        errors.append(
+                            ValidationErrorItem(
+                                code="FLOOR_OUTSIDE_BUILDING",
+                                message=f"Floor slab extends outside parent building footprint by {outside_area} m²",
+                            )
+                        )
+                except Exception as e:
+                    warnings.append(
+                        ValidationWarningItem(
+                            code="FLOOR_CONTAINMENT_CHECK_FAILED",
+                            message=f"Could not verify floor containment within building: {str(e)}",
+                        )
+                    )
+
+        # 3. Vertical stacking & uniqueness checks against existing floors in building
+        existing_floors = await floor_repository.get_by_building(db, building_id)
+        for ef in existing_floors:
+            if current_floor_id and ef.id == current_floor_id:
+                continue
+
+            # Duplicate floor number
+            if ef.floor_number == floor_number:
+                errors.append(
+                    ValidationErrorItem(
+                        code="DUPLICATE_FLOOR_NUMBER",
+                        message=f"Building already has a floor with index {floor_number} (Code: '{ef.floor_code}')",
+                    )
+                )
+
+            # Vertical elevation overlap clash (with 5cm tolerance for shared slab)
+            overlap_min = max(elevation_min_m, ef.elevation_min_m)
+            overlap_max = min(elevation_max_m, ef.elevation_max_m)
+            if overlap_min < (overlap_max - 0.05):
+                errors.append(
+                    ValidationErrorItem(
+                        code="FLOOR_ELEVATION_CLASH",
+                        message=f"Floor elevation range [{elevation_min_m}m, {elevation_max_m}m] clashes vertically with existing floor {ef.floor_number} [{ef.elevation_min_m}m, {ef.elevation_max_m}m]",
+                    )
+                )
+
+        return ValidationResult(
+            valid=len(errors) == 0,
+            errors=errors,
+            warnings=warnings,
+        )
+
+    async def validate_unit_candidate(
+        self,
+        db: AsyncSession,
+        floor_id: uuid.UUID,
+        unit_number: str,
+        elevation_min_m: float,
+        elevation_max_m: float,
+        geometry_input: Union[Dict[str, Any], str],
+        current_unit_id: Optional[uuid.UUID] = None,
+        source_srid: int = 4326,
+    ) -> ValidationResult:
+        """Validate property unit boundary containment within floor and disjointness against peers."""
+        errors: List[ValidationErrorItem] = []
+        warnings: List[ValidationWarningItem] = []
+
+        # 1. Elevation sanity
+        if elevation_min_m >= elevation_max_m:
+            errors.append(
+                ValidationErrorItem(
+                    code="INVALID_ELEVATION_BOUNDS",
+                    message=f"Unit elevation min ({elevation_min_m}m) must be strictly less than elevation max ({elevation_max_m}m)",
+                )
+            )
+
+        # 2. Geometry base validity
+        base_res = GeometryEngine.validate_geometry(geometry_input, expected_type="POLYGON", source_srid=source_srid)
+        errors.extend(base_res.errors)
+        warnings.extend(base_res.warnings)
+
+        # 3. Floor existence & floor containment check
+        floor = await floor_repository.get_by_id(db, floor_id)
+        if not floor:
+            errors.append(
+                ValidationErrorItem(
+                    code="FLOOR_NOT_FOUND",
+                    message=f"Parent floor with ID '{floor_id}' does not exist",
+                )
+            )
+            return ValidationResult(valid=False, errors=errors, warnings=warnings)
+
+        if base_res.valid and floor.geometry_wkt:
+            try:
+                u_geom = GeometryEngine.parse_geometry(geometry_input, source_srid=source_srid)
+                f_geom = GeometryEngine.parse_geometry(floor.geometry_wkt)
+
+                # Unit containment in floor slab
+                is_covered, outside_area = GeometryEngine.check_containment(u_geom, f_geom)
+                if not is_covered and outside_area > 0.2:
+                    errors.append(
+                        ValidationErrorItem(
+                            code="UNIT_OUTSIDE_FLOOR",
+                            message=f"Unit boundary extends outside parent floor slab by {outside_area} m²",
+                        )
+                    )
+
+                # Vertical span containment warning
+                if elevation_min_m < (floor.elevation_min_m - 0.5) or elevation_max_m > (floor.elevation_max_m + 0.5):
+                    warnings.append(
+                        ValidationWarningItem(
+                            code="UNIT_ELEVATION_EXCEEDS_FLOOR",
+                            message=f"Unit elevation range [{elevation_min_m}m, {elevation_max_m}m] differs from floor bounds [{floor.elevation_min_m}m, {floor.elevation_max_m}m]",
+                        )
+                    )
+
+                # 4. Peer unit disjointness on same floor (no area overlap)
+                existing_units = await unit_repository.get_by_floor(db, floor_id)
+                for eu in existing_units:
+                    if current_unit_id and eu.id == current_unit_id:
+                        continue
+
+                    # Duplicate unit number on same floor
+                    if eu.unit_number.strip().lower() == unit_number.strip().lower():
+                        errors.append(
+                            ValidationErrorItem(
+                                code="DUPLICATE_UNIT_NUMBER",
+                                message=f"Floor already contains unit with designation '{unit_number}' (Code: '{eu.unit_code}')",
+                            )
+                        )
+
+                    # Spatial area overlap test
+                    if eu.geometry_wkt:
+                        try:
+                            eu_geom = GeometryEngine.parse_geometry(eu.geometry_wkt)
+                            if u_geom.intersects(eu_geom):
+                                inter = u_geom.intersection(eu_geom)
+                                # Check if intersection is 2D polygonal area overlap (not merely shared boundary linestring)
+                                if inter.geom_type in ['Polygon', 'MultiPolygon'] and inter.area > 0.00000001:
+                                    overlap_area_m2 = GeometryEngine.calculate_geodesic_area(inter)
+                                    if overlap_area_m2 > 0.05:
+                                        errors.append(
+                                            ValidationErrorItem(
+                                                code="UNIT_OVERLAP_CONFLICT",
+                                                message=f"Unit boundary overlaps with existing Unit '{eu.unit_number}' by {overlap_area_m2} m²",
+                                            )
+                                        )
+                        except Exception:
+                            continue
+
+            except Exception as e:
+                warnings.append(
+                    ValidationWarningItem(
+                        code="UNIT_CONTAINMENT_CHECK_FAILED",
+                        message=f"Could not verify unit spatial containment: {str(e)}",
+                    )
+                )
+
+        return ValidationResult(
+            valid=len(errors) == 0,
+            errors=errors,
+            warnings=warnings,
+        )
 
 
 spatial_validation_service = SpatialValidationService()

@@ -370,18 +370,40 @@ The 3D engine strictly tracks vertical reference datums:
 
 ---
 
-# 11. 3D DIGITAL TWIN ARCHITECTURE
+# 11. 3D DIGITAL TWIN & VERTICAL PROPERTY HIERARCHY ARCHITECTURE
 
-The Phase 3 digital twin layers:
-- **Ground Context**: Authoritative Cadastral Parcel boundaries projected at ground altitude $0.0$.
-- **Building Volume**: 2.5D Building Footprint extrusions from $H_{base}$ to $H_{base} + H_{roof}$.
-- **Metrics**: Geodesic footprint area ($m^2$), 3D volumetric capacity ($m^3$), height confidence ($0.0 \dots 1.0$), and survey source.
-- **Audit & History**: Height and elevation mutations logged to `audit_logs` (`BUILDING_HEIGHT_UPDATED`, `BASE_ELEVATION_UPDATED`).
-- **2D/3D Bi-Directional Linkage**:
-  - Selecting a parcel or building in the 2D Cadastral Map provides a direct "View in 3D Digital Twin" action.
-  - Selecting an extruded building in the 3D viewer links back to the 2D Cadastral Record and parcel context.
+The 3D Digital Twin integrates horizontal 2D cadastre with vertical property volumetric structures:
 
-Subsequent phases (Phase 4+) will layer floor slices, unit volumetric parcels, and utility linestrings.
+### 11.1 Layered Spatial Stack
+1. **Ground Context**: Authoritative Cadastral Parcel boundaries projected at ground altitude ($Z=0.0$).
+2. **Building Volume (2.5D)**: Outer building footprint envelope extruded from $H_{base}$ to $H_{base} + H_{roof}$.
+3. **Vertical Floor Slabs**: Discrete horizontal slices $[Z_{min}, Z_{max}]$ bounded by the building footprint.
+4. **Property Unit Prisms**: Subdivided interior polygons extruded between floor bounds $[Z_{min}, Z_{max}]$, representing distinct legal property interests (apartments, retail suites, commercial offices).
+
+### 11.2 Hierarchical Data Structure
+```
+Cadastral Parcel (2D Surface)
+  └── Building Footprint (Ground Envelope)
+        └── Building 3D Representation (Extrusion Height, Base Elevation, Datum)
+              └── Floor Slabs [Z_min .. Z_max]
+                    └── Property Units (Subdivided Prisms)
+                          └── Legal Property Record (Deed / Ownership)
+```
+
+### 11.3 Vertical & Topological Invariant Rules
+- **Stacking Continuity & Non-Clash**: Two floors belonging to the same building cannot overlap in vertical elevation:
+  $$\forall i \neq j, \quad (Z_{min}^{(i)} < Z_{max}^{(j)}) \land (Z_{max}^{(i)} > Z_{min}^{(j)}) = \text{False}$$
+- **Footprint Containment**: $\text{ST\_Within}(\text{FloorGeometry}, \text{BuildingGeometry}) = \text{True}$
+- **Unit Containment**: $\text{ST\_Within}(\text{UnitGeometry}, \text{FloorGeometry}) = \text{True}$
+- **Unit Interior Disjointness**: On any given floor, unit horizontal geometries must not overlap:
+  $$\forall u_1, u_2 \in \text{Floor}, \quad \text{Area}(u_1 \cap u_2) = 0$$
+
+### 11.4 Interactive 3D Viewing Modes
+- **Exploded View Mode**: Vertically offsets each floor slab by $\Delta Z = \text{floor\_number} \times 12.0\text{m}$, allowing instant inspection of stacked floor layouts.
+- **Isolated Floor Mode**: Clamps camera view and entity visibility to a single selected floor slab and its contained unit prisms while rendering parent building as a translucent wireframe envelope ($20\%$ opacity).
+- **Unit Tree Explorer**: Bi-directional tree synchronization linking Cesium entity selection to the collapsible hierarchy tree view.
+
+Subsequent phases (Phase 5+) will layer surveyor field ingestion, point clouds, and utility linestrings.
 
 ---
 

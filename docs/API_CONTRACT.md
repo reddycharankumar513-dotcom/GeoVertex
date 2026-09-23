@@ -369,3 +369,152 @@ All 4xx and 5xx responses strictly adhere to the unified error schema:
 - **Purpose**: Asset management for glTF, GLB, and JSON extrusion models.
 - **Auth**: `POST` / `DELETE` require `ADMIN`, `GOVERNMENT_OFFICER`, or `SURVEYOR`.
 
+---
+
+## 9. Building, Floor & Unit Hierarchy (Phase 4)
+
+### 9.1 `GET /api/v1/floors`
+- **Purpose**: List floor slabs with filtering by building, floor number, or floor type.
+- **Auth**: Bearer Token (All authenticated roles)
+- **Query Params**: `building_id`, `floor_type`, `skip`, `limit`
+- **Response `200 OK`**:
+```json
+{
+  "items": [
+    {
+      "id": "7c9b0e12-4d3a-4a11-89b1-0987654321ab",
+      "building_id": "3a1e2f34-5b6c-7d8e-9f0a-1b2c3d4e5f6a",
+      "floor_number": 1,
+      "floor_name": "Level 1 - Retail",
+      "elevation_min_m": 0.0,
+      "elevation_max_m": 4.5,
+      "height_m": 4.5,
+      "area_sqm": 850.0,
+      "floor_type": "STANDARD",
+      "unit_count": 4,
+      "geometry": { "type": "Polygon", "coordinates": [...] }
+    }
+  ],
+  "total": 1,
+  "skip": 0,
+  "limit": 50
+}
+```
+
+### 9.2 `POST /api/v1/floors`
+- **Purpose**: Create a floor slab with strict vertical clash validation and footprint containment checks.
+- **Auth**: Bearer Token (`ADMIN`, `GOVERNMENT_OFFICER`, `SURVEYOR`)
+- **Request Body**:
+```json
+{
+  "building_id": "3a1e2f34-5b6c-7d8e-9f0a-1b2c3d4e5f6a",
+  "floor_number": 2,
+  "floor_name": "Level 2 - Offices",
+  "elevation_min_m": 4.5,
+  "elevation_max_m": 8.5,
+  "floor_type": "STANDARD",
+  "geometry": { "type": "Polygon", "coordinates": [...] }
+}
+```
+- **Response `201 Created`**: Created `FloorDetailResponse`.
+
+### 9.3 `GET /api/v1/floors/{id}`
+- **Purpose**: Retrieve floor slab details including vertical elevation bounds and contained units.
+- **Auth**: Bearer Token (All authenticated roles)
+
+### 9.4 `PUT /api/v1/floors/{id}` & `DELETE /api/v1/floors/{id}`
+- **Purpose**: Update floor properties/geometry or delete floor slab (cascades to units).
+- **Auth**: Bearer Token (`ADMIN`, `GOVERNMENT_OFFICER`, `SURVEYOR`)
+
+### 9.5 `GET /api/v1/buildings/{building_id}/floors`
+- **Purpose**: Retrieve all stacked floors for a building ordered by `floor_number` ascending.
+- **Auth**: Bearer Token (All authenticated roles)
+
+### 9.6 `GET /api/v1/units`
+- **Purpose**: List property units with filtering by floor, building, unit type, and ownership type.
+- **Auth**: Bearer Token (All authenticated roles)
+- **Query Params**: `floor_id`, `building_id`, `unit_type`, `ownership_type`, `skip`, `limit`
+- **Response `200 OK`**:
+```json
+{
+  "items": [
+    {
+      "id": "8d0c1f23-5e4b-4b22-90c2-1098765432bc",
+      "floor_id": "7c9b0e12-4d3a-4a11-89b1-0987654321ab",
+      "building_id": "3a1e2f34-5b6c-7d8e-9f0a-1b2c3d4e5f6a",
+      "unit_number": "101",
+      "unit_name": "Retail Suite 101",
+      "unit_type": "COMMERCIAL",
+      "ownership_type": "CONDOMINIUM",
+      "elevation_min_m": 0.0,
+      "elevation_max_m": 4.5,
+      "height_m": 4.5,
+      "gross_area_sqm": 220.0,
+      "net_area_sqm": 195.0,
+      "property_id": "f5e4d3c2-b1a0-4f9e-8d7c-6b5a4e3d2c1b",
+      "geometry": { "type": "Polygon", "coordinates": [...] }
+    }
+  ],
+  "total": 1,
+  "skip": 0,
+  "limit": 50
+}
+```
+
+### 9.7 `POST /api/v1/units`
+- **Purpose**: Create a property unit volumetric prism with floor containment and interior disjointness validation.
+- **Auth**: Bearer Token (`ADMIN`, `GOVERNMENT_OFFICER`, `SURVEYOR`)
+- **Request Body**:
+```json
+{
+  "floor_id": "7c9b0e12-4d3a-4a11-89b1-0987654321ab",
+  "unit_number": "102",
+  "unit_name": "Retail Suite 102",
+  "unit_type": "COMMERCIAL",
+  "ownership_type": "CONDOMINIUM",
+  "elevation_min_m": 0.0,
+  "elevation_max_m": 4.5,
+  "property_id": null,
+  "geometry": { "type": "Polygon", "coordinates": [...] }
+}
+```
+- **Response `201 Created`**: Created `UnitDetailResponse`.
+
+### 9.8 `GET /api/v1/units/{id}`
+- **Purpose**: Retrieve property unit detail including 3D prism bounds and legal property cross-reference.
+- **Auth**: Bearer Token (All authenticated roles)
+
+### 9.9 `PUT /api/v1/units/{id}` & `DELETE /api/v1/units/{id}`
+- **Purpose**: Update unit metadata/geometry or delete property unit record.
+- **Auth**: Bearer Token (`ADMIN`, `GOVERNMENT_OFFICER`, `SURVEYOR`)
+
+### 9.10 `GET /api/v1/buildings/{building_id}/hierarchy`
+- **Purpose**: Retrieve full hierarchical tree for a building: `Building` $\rightarrow$ stacked `Floors` $\rightarrow$ contained `PropertyUnits`.
+- **Auth**: Bearer Token (All authenticated roles)
+- **Response `200 OK`**:
+```json
+{
+  "building": { "id": "...", "building_reference": "BLD-W101-001", "height": 36.0 },
+  "total_floors": 8,
+  "total_units": 32,
+  "floors": [
+    {
+      "id": "...",
+      "floor_number": 1,
+      "floor_name": "Ground Floor",
+      "elevation_min_m": 0.0,
+      "elevation_max_m": 4.5,
+      "units": [
+        {
+          "id": "...",
+          "unit_number": "G-01",
+          "unit_type": "COMMERCIAL",
+          "gross_area_sqm": 220.0
+        }
+      ]
+    }
+  ]
+}
+```
+
+
