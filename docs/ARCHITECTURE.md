@@ -403,11 +403,116 @@ Cadastral Parcel (2D Surface)
 - **Isolated Floor Mode**: Clamps camera view and entity visibility to a single selected floor slab and its contained unit prisms while rendering parent building as a translucent wireframe envelope ($20\%$ opacity).
 - **Unit Tree Explorer**: Bi-directional tree synchronization linking Cesium entity selection to the collapsible hierarchy tree view.
 
-Subsequent phases (Phase 5+) will layer surveyor field ingestion, point clouds, and utility linestrings.
+Subsequent phases will layer point clouds, AI segmentation, and utility linestrings.
 
 ---
 
-# 12. AI ARCHITECTURE
+# 12. SURVEYOR FIELD WORKFLOW & GEOSPATIAL DATA COLLECTION ARCHITECTURE (Phase 5)
+
+The Surveyor Field Workflow architecture enables accredited cadastral surveyors to capture ground truth observations and photo evidence on mobile/tablet devices in both connected and disconnected environments.
+
+### 12.1 End-to-End System Topology
+```
+                     FIELD ENVIRONMENT (PWA / MOBILE BROWSER)
+  ┌─────────────────────────────────────────────────────────────────────────────┐
+  │  HTML5 Geolocation (watchPosition)  │  Camera API (capture="environment")   │
+  │  Latitude, Longitude, Altitude      │  Raw JPEG / PNG / WebP binary         │
+  │  Horizontal & Vertical Accuracy     │  Web Cryptography API (SHA-256 Hash)  │
+  └───────────────────────┬─────────────────────────────────┬───────────────────┘
+                          │                                 │
+                          ▼                                 ▼
+              ┌────────────────────────────────────────────────────────┐
+              │           FRONTEND FIELD WORKSPACE LAYER               │
+              │  - SurveyMap (2D GPS canvas & boundary overlays)       │
+              │  - SurveyFormEngine (Observation capture)              │
+              │  - EvidenceGallery (Photo capture & SHA-256 display)   │
+              │  - ValidationChecklist (Pre-submission gate)          │
+              └───────────────────────────┬────────────────────────────┘
+                                          │
+                     ┌────────────────────┴────────────────────┐
+                     ▼ (Online)                                ▼ (Offline)
+           ┌──────────────────────┐                  ┌───────────────────┐
+           │ REST API Client      │                  │ IndexedDB Store   │
+           │ (Axios / Fetch)      │                  │ (geovertex_offline)│
+           └──────────┬───────────┘                  └─────────┬─────────┘
+                      │                                        │ (When online)
+                      │                                        ▼
+                      │                              ┌───────────────────┐
+                      │                              │ Offline Sync Hook │
+                      │                              │ (Auto-Batch Queue)│
+                      │                              └─────────┬─────────┘
+                      │                                        │
+                      ▼                                        ▼
+    ================== HTTPS / JSON & MULTIPART BOUNDARY ======================
+                      │                                        │
+                      ▼                                        ▼
+          ┌──────────────────────┐                  ┌───────────────────┐
+          │ Surveys Router       │                  │ Sync Router       │
+          │ (/api/v1/surveys)    │                  │ (/api/v1/sync)    │
+          └──────────┬───────────┘                  └─────────┬─────────┘
+                     │                                        │
+                     ▼                                        ▼
+          ┌─────────────────────────────────────────────────────────────┐
+          │                    BACKEND SERVICE LAYER                    │
+          │  - SurveyService (Lifecycle coordinator)                    │
+          │  - SurveyStateMachine (Strict status guard)                 │
+          │  - SurveyValidationService (Discrepancy engine)             │
+          │  - SurveySyncService (Atomic batch processor)               │
+          │  - StorageService (SHA-256 verification & storage)          │
+          └──────────────────────────────┬──────────────────────────────┘
+                                         │
+                     ┌───────────────────┴───────────────────┐
+                     ▼                                       ▼
+          ┌──────────────────────┐               ┌──────────────────────┐
+          │ Relational Database  │               │ Secure Disk Storage  │
+          │ PostgreSQL / PostGIS │               │ uploads/evidence/    │
+          │ - survey_projects    │               │ - {session_id}/      │
+          │ - survey_assignments │               │   {uuid}_{filename}  │
+          │ - survey_sessions    │               └──────────────────────┘
+          │ - survey_observations│
+          │ - survey_evidence    │
+          │ - survey_submissions │
+          │ - sync_operations    │
+          │ - audit_logs         │
+          └──────────────────────┘
+```
+
+### 12.2 Architectural Components
+
+#### 1. Progressive Web App (PWA) & Offline-First Engine
+- **IndexedDB Client Storage**: Built on `idb`, storing cached assignments, active sessions, draft observations, and pending mutation operations.
+- **Client Idempotency**: Each mutation is tagged with a client-generated UUID (`operation_id`). Re-sending a batch upon network jitter is guaranteed idempotent.
+- **Dynamic Network Monitor**: The `useOnlineStatus` hook tracks browser `navigator.onLine` and `online`/`offline` window events. Upon re-establishing connection, pending sync operations are flushed automatically.
+
+#### 2. GNSS Quality Classification & Spatial Canvas
+- **Real-Time GPS Tracking**: HTML5 Geolocation API with `enableHighAccuracy: true`, continuous heading, and altitude tracking.
+- **Accuracy Halo**: Visualized dynamically on the 2D survey map. Observation accuracy is categorized into 4 tiers:
+  - High Precision ($<1\text{m}$)
+  - Differential ($1-3\text{m}$)
+  - Standalone GNSS ($3-10\text{m}$)
+  - Coarse / Unacceptable ($>10\text{m}$)
+- **Boundary Overlays**: Vector rendering of parcel polygon, building footprint, GPS location dot, accuracy buffer, and tagged observation pins.
+
+#### 3. Evidence Integrity & Cryptographic Chain of Custody
+- **Browser-Side SHA-256 Calculation**: Calculated via `crypto.subtle.digest('SHA-256', buffer)` prior to transmission.
+- **Server Verification**: The backend recomputes the SHA-256 digest on the incoming stream. Mismatches are rejected immediately (`400 Bad Request`).
+- **Object Storage**: Stored in partitioned directory structures (`uploads/evidence/{session_id}/...`) with restricted download endpoints enforcing role authorization.
+
+#### 4. Cadastral Validation & Discrepancy Engine
+- Deterministic comparison between empirical field measurements and authoritative cadastral records.
+- Compares measured height vs official building height with percentage delta calculation.
+- Compares field floor counts vs registered floors.
+- Identifies boundary discrepancy flags and potential setback encroachments.
+- Generates pre-submission validation summaries with explicit `can_submit` gating.
+
+#### 5. Frozen Snapshot Submissions & Cadastral Separation
+- **Submission Snapshot**: Submissions freeze all observations, evidence links, and discrepancy reports into an immutable JSON document.
+- **Version Numbering**: Sequential version counter ($V_1, V_2, \dots$) preserves full revision history if an officer requests amendments.
+- **Cadastral Separation Principle**: Field surveys serve as legal evidence snapshots. Government Officer approval marks the submission as `APPROVED` and records an immutable audit log entry. It does **not** directly mutate authoritative parcel or building footprints in PostGIS without formal legislative cadastral amendment procedures.
+
+---
+
+# 13. AI ARCHITECTURE
 
 AI service:
 
@@ -1188,3 +1293,32 @@ OFFICER REVIEW
 VERSIONED POSTGIS DATABASE
 ↓
 CITIZEN / SURVEYOR / GOVERNMENT APPLICATIONS
+
+---
+
+# 40. PRODUCTION DEPLOYMENT & DEVOPS ARCHITECTURE (PHASE 15)
+
+The production deployment architecture establishes an isolated, defense-in-depth, high-availability platform:
+
+1. **Ingress & Edge Security Tier**:
+   - Nginx reverse proxy with TLS 1.3 termination, HSTS (`max-age=31536000`), and Cesium-compatible Content Security Policy (CSP).
+   - In-memory rate limiting zones protecting authentication (`10r/s`) and general API (`50r/s`).
+   - Gzip compression and long-term caching for immutable frontend assets (`/assets/`).
+
+2. **Application & Processing Tier**:
+   - FastAPI application server running 4 Uvicorn ASGI workers with non-root security context (`geovertex`, UID 10001).
+   - Celery background worker pool handling asynchronous spatial tasks, OCR, and AI candidate processing.
+   - Dual health probes: `/health/live` (process liveness) and `/health/ready` (system readiness).
+   - Prometheus metrics exposition (`/metrics`).
+
+3. **Data & Storage Persistence Tier**:
+   - PostgreSQL 16 + PostGIS 3.4 with async connection pooling (`pool_size=20`, `max_overflow=10`, `pool_pre_ping=True`).
+   - Redis 7 with Append-Only File (AOF) persistence for caching and task brokerage.
+   - Multi-backend object storage (`DocumentStorageService`) supporting local filesystem, AWS S3, and MinIO with SHA-256 integrity verification.
+
+4. **Disaster Recovery & Operational Governance**:
+   - Automated database backup tool (`backend/scripts/backup.py`) producing compressed archives with SHA-256 digests and JSON metadata manifests.
+   - Disaster recovery restore tool (`backend/scripts/restore.py`) enforcing pre-restore checksum verification and mandatory confirmation flags.
+   - Target objectives: Recovery Point Objective (RPO) $\le 1\text{ hour}$, Recovery Time Objective (RTO) $\le 15\text{ minutes}$.
+   - Comprehensive CI/CD pipeline (`.github/workflows/ci.yml`) validating tests, migrations, types, and container builds.
+

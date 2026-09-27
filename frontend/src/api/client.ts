@@ -32,6 +32,10 @@ class ApiClient {
       ...((options.headers as Record<string, string>) || {}),
     };
 
+    if (options.body instanceof FormData) {
+      delete headers['Content-Type'];
+    }
+
     const response = await fetch(url, {
       ...options,
       headers,
@@ -100,3 +104,4 @@ class ApiClient {
 }
 
 export const api = new ApiClient();
+export const apiClient = api;

@@ -8,13 +8,16 @@ from app.core.config import settings
 from app.core.errors import (
     GeoVertexException,
     geovertex_exception_handler,
+    http_exception_handler,
     unhandled_exception_handler,
     validation_exception_handler,
 )
+from starlette.exceptions import HTTPException as StarletteHTTPException
 from app.core.logging import logger
 from app.database.base import Base
 from app.database.session import async_engine
 from app.middleware.logging_middleware import RequestTracingMiddleware
+from app.middleware.rate_limit import RateLimitMiddleware
 
 
 @asynccontextmanager
@@ -52,9 +55,12 @@ def create_application() -> FastAPI:
 
     # 2. Request Tracing & Structured Logging Middleware
     app.add_middleware(RequestTracingMiddleware)
+    # Rate Limiting & Abuse Protection
+    app.add_middleware(RateLimitMiddleware)
 
     # 3. Standardized Error Handlers
     app.add_exception_handler(GeoVertexException, geovertex_exception_handler)
+    app.add_exception_handler(StarletteHTTPException, http_exception_handler)
     app.add_exception_handler(RequestValidationError, validation_exception_handler)
     app.add_exception_handler(Exception, unhandled_exception_handler)
 

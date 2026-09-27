@@ -1,19 +1,29 @@
 from typing import AsyncGenerator
 from sqlalchemy import create_engine
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
-from sqlalchemy.orm import sessionmaker, Session
+from sqlalchemy.orm import Session, sessionmaker
 from app.core.config import settings
 
-# Setup Async Engine
-async_connect_args = {}
+# Configure Async Engine kwargs with production connection pooling
+async_engine_kwargs = {
+    "echo": settings.DEBUG and settings.ENVIRONMENT != "production",
+    "future": True,
+}
+
 if "sqlite" in settings.DATABASE_URL:
-    async_connect_args["check_same_thread"] = False
+    async_engine_kwargs["connect_args"] = {"check_same_thread": False}
+else:
+    async_engine_kwargs.update({
+        "pool_size": settings.DB_POOL_SIZE,
+        "max_overflow": settings.DB_MAX_OVERFLOW,
+        "pool_timeout": settings.DB_POOL_TIMEOUT,
+        "pool_recycle": settings.DB_POOL_RECYCLE,
+        "pool_pre_ping": settings.DB_POOL_PRE_PING,
+    })
 
 async_engine = create_async_engine(
     settings.DATABASE_URL,
-    echo=settings.DEBUG,
-    future=True,
-    connect_args=async_connect_args,
+    **async_engine_kwargs,
 )
 
 AsyncSessionLocal = async_sessionmaker(
@@ -24,16 +34,26 @@ AsyncSessionLocal = async_sessionmaker(
     autoflush=False,
 )
 
-# Setup Sync Engine (for Alembic migrations and synchronous scripts)
-sync_connect_args = {}
+# Configure Sync Engine kwargs (for Alembic migrations, backups, and synchronous tools)
+sync_engine_kwargs = {
+    "echo": False,
+    "future": True,
+}
+
 if "sqlite" in settings.DATABASE_URL_SYNC:
-    sync_connect_args["check_same_thread"] = False
+    sync_engine_kwargs["connect_args"] = {"check_same_thread": False}
+else:
+    sync_engine_kwargs.update({
+        "pool_size": settings.DB_POOL_SIZE,
+        "max_overflow": settings.DB_MAX_OVERFLOW,
+        "pool_timeout": settings.DB_POOL_TIMEOUT,
+        "pool_recycle": settings.DB_POOL_RECYCLE,
+        "pool_pre_ping": settings.DB_POOL_PRE_PING,
+    })
 
 sync_engine = create_engine(
     settings.DATABASE_URL_SYNC,
-    echo=False,
-    future=True,
-    connect_args=sync_connect_args,
+    **sync_engine_kwargs,
 )
 
 SyncSessionLocal = sessionmaker(

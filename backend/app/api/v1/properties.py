@@ -74,6 +74,7 @@ async def create_property(
         ip_address=ip_address,
         user_agent=user_agent,
     )
+    await db.commit()
     return PropertyResponse.model_validate(created)
 
 

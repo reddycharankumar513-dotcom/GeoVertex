@@ -81,8 +81,19 @@ class InactiveUserException(ForbiddenException):
         )
 
 
+class ValidationException(BadRequestException):
+    def __init__(self, message: str, details: Optional[Dict[str, Any]] = None):
+        super().__init__(message=message, details=details)
+        self.code = "VALIDATION_ERROR"
+
+
+from datetime import datetime, timezone
+import uuid
+from starlette.exceptions import HTTPException as StarletteHTTPException
+
+
 async def geovertex_exception_handler(request: Request, exc: GeoVertexException) -> JSONResponse:
-    request_id = getattr(request.state, "request_id", None)
+    request_id = getattr(request.state, "request_id", None) or str(uuid.uuid4())
     logger.warning(
         f"Handled error: {exc.code} - {exc.message}",
         extra={"request_id": request_id, "extra_data": exc.details},
@@ -94,6 +105,8 @@ async def geovertex_exception_handler(request: Request, exc: GeoVertexException)
                 "code": exc.code,
                 "message": exc.message,
                 "details": exc.details,
+                "request_id": request_id,
+                "timestamp": datetime.now(timezone.utc).isoformat(),
             }
         },
         headers=exc.headers,
@@ -101,7 +114,7 @@ async def geovertex_exception_handler(request: Request, exc: GeoVertexException)
 
 
 async def validation_exception_handler(request: Request, exc: RequestValidationError) -> JSONResponse:
-    request_id = getattr(request.state, "request_id", None)
+    request_id = getattr(request.state, "request_id", None) or str(uuid.uuid4())
     errors = exc.errors()
     simplified_errors = [
         {
@@ -122,13 +135,45 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
                 "code": "VALIDATION_ERROR",
                 "message": "Request payload validation failed",
                 "details": {"fields": simplified_errors},
+                "request_id": request_id,
+                "timestamp": datetime.now(timezone.utc).isoformat(),
             }
         },
     )
 
 
+async def http_exception_handler(request: Request, exc: StarletteHTTPException) -> JSONResponse:
+    request_id = getattr(request.state, "request_id", None) or str(uuid.uuid4())
+    code_map = {
+        400: "BAD_REQUEST",
+        401: "UNAUTHORIZED",
+        403: "FORBIDDEN",
+        404: "RESOURCE_NOT_FOUND",
+        405: "METHOD_NOT_ALLOWED",
+        409: "CONFLICT",
+        422: "UNPROCESSABLE_ENTITY",
+        429: "TOO_MANY_REQUESTS",
+        500: "INTERNAL_SERVER_ERROR",
+        503: "SERVICE_UNAVAILABLE",
+    }
+    code = code_map.get(exc.status_code, f"HTTP_{exc.status_code}")
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={
+            "error": {
+                "code": code,
+                "message": str(exc.detail) if exc.detail else "An HTTP error occurred",
+                "details": {},
+                "request_id": request_id,
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+            }
+        },
+        headers=getattr(exc, "headers", None),
+    )
+
+
 async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:
-    request_id = getattr(request.state, "request_id", "unknown")
+    request_id = getattr(request.state, "request_id", None) or str(uuid.uuid4())
     logger.error(
         f"Unhandled server error on {request.method} {request.url.path}: {str(exc)}",
         exc_info=True,
@@ -141,6 +186,8 @@ async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONR
                 "code": "INTERNAL_SERVER_ERROR",
                 "message": "An unexpected server error occurred. Please contact system support.",
                 "details": {"request_id": request_id},
+                "request_id": request_id,
+                "timestamp": datetime.now(timezone.utc).isoformat(),
             }
         },
     )

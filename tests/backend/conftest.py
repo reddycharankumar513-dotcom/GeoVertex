@@ -36,6 +36,9 @@ TestAsyncSessionLocal = async_sessionmaker(
     autoflush=False,
 )
 
+import app.database.session as app_db_session
+app_db_session.AsyncSessionLocal = TestAsyncSessionLocal
+
 
 @pytest.fixture(scope="session")
 def event_loop():
@@ -132,10 +135,30 @@ async def seed_test_data(db_session: AsyncSession):
     )
     db_session.add(inactive_user)
     await db_session.flush()
-    users["INACTIVE"] = inactive_user
+
+    # Seed Active Identifier Scheme (Phase 12)
+    from app.models.identifier import IdentifierScheme
+    scheme = IdentifierScheme(
+        scheme_code="GV3D-V1",
+        name="GeoVertex 3D Standard Technical Identifier Scheme",
+        version=1,
+        description="Standard test identifier scheme",
+        prefix="GV3D",
+        separator="-",
+        jurisdiction_component="strip_prefix_code",
+        parcel_component="strip_prefix_code",
+        building_component="strip_prefix_ref",
+        floor_component="strip_floor_suffix",
+        unit_component="strip_unit_suffix",
+        padding_rules={},
+        checksum_enabled=False,
+        active=True,
+    )
+    db_session.add(scheme)
+    await db_session.flush()
 
     await db_session.commit()
-    return {"org": org, "jur": jur, "users": users}
+    return {"org": org, "jur": jur, "users": users, "scheme": scheme}
 
 
 @pytest_asyncio.fixture(scope="function")
@@ -146,6 +169,7 @@ async def auth_tokens(client: AsyncClient, seed_test_data) -> dict:
         "officer": "officer@test.org",
         "surveyor": "surveyor@test.org",
         "citizen": "citizen@test.org",
+        "planner": "planner@test.org",
     }
     headers = {}
     for role_name, email in roles.items():

@@ -1,13 +1,18 @@
 # ==============================================================================
-# GeoVertex Worker Dockerfile (Celery background processor)
+# GeoVertex Celery Worker Production Dockerfile
+# Multi-stage build with non-root execution and geospatial dependencies
 # ==============================================================================
-FROM python:3.12-slim AS base
+
+# ------------------------------------------------------------------------------
+# Stage 1: Build Dependencies
+# ------------------------------------------------------------------------------
+FROM python:3.12-slim AS builder
 
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     PIP_NO_CACHE_DIR=1
 
-WORKDIR /app
+WORKDIR /install
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
@@ -19,11 +24,46 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libproj-dev \
     && rm -rf /var/lib/apt/lists/*
 
-COPY backend/requirements.txt /app/requirements.txt
-RUN pip install --upgrade pip setuptools wheel && \
-    pip install -r /app/requirements.txt
+COPY backend/requirements.txt /install/requirements.txt
+RUN pip install --prefix=/install/deps --no-warn-script-location \
+    --upgrade pip setuptools wheel && \
+    pip install --prefix=/install/deps --no-warn-script-location \
+    -r /install/requirements.txt
 
+# ------------------------------------------------------------------------------
+# Stage 2: Worker Runtime
+# ------------------------------------------------------------------------------
+FROM python:3.12-slim AS runtime
+
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PATH="/app/deps/bin:${PATH}" \
+    PYTHONPATH="/app/deps/lib/python3.12/site-packages:/app/backend:${PYTHONPATH}"
+
+WORKDIR /app
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libpq5 \
+    gdal-bin \
+    libgeos-c1v5 \
+    libproj25 \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN groupadd -g 10001 geovertex && \
+    useradd -u 10001 -g geovertex -s /bin/bash -m geovertex
+
+COPY --from=builder /install/deps /app/deps
 COPY backend /app/backend
+
+RUN mkdir -p /app/backend/uploads/documents && \
+    chown -R geovertex:geovertex /app
+
+USER geovertex
 WORKDIR /app/backend
 
-CMD ["celery", "-A", "app.workers.celery_app", "worker", "--loglevel=info"]
+# Celery healthcheck via worker ping
+HEALTHCHECK --interval=30s --timeout=10s --start-period=20s --retries=3 \
+    CMD celery -A app.workers.celery_app inspect ping -d celery@$HOSTNAME || exit 1
+
+CMD ["celery", "-A", "app.workers.celery_app", "worker", "--loglevel=info", "--concurrency=4"]

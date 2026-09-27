@@ -68,3 +68,9 @@ htmlcov/
 # MinIO / Local storage uploads
 uploads/
 storage/
+
+# Backups & Dump Archives
+backups/
+backend/backups/
+*.dump.gz
+

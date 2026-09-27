@@ -2,20 +2,31 @@ import React from 'react';
 import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import {
   Activity,
+  Bell,
   Box,
+  ClipboardList,
   Compass,
+  Cpu,
   FileCheck,
+  FileText,
+  Fingerprint,
+  FolderKanban,
   History,
   Layers,
+  ListChecks,
   LogOut,
   Map,
   MapPin,
+  Network,
+  Scale,
   Shield,
+  ShieldCheck,
   User as UserIcon,
   Users,
 } from 'lucide-react';
 import { useAuth } from '../auth/AuthContext';
 import { UserRole } from '../types';
+import { NotificationBell } from '../features/workflow/NotificationBell';
 
 export const DashboardLayout: React.FC = () => {
   const { user, role, logout } = useAuth();
@@ -59,7 +70,7 @@ export const DashboardLayout: React.FC = () => {
                 GeoVertex
               </span>
               <span className="block text-[10px] uppercase font-mono tracking-wider text-slate-400">
-                Phase 3 Digital Twin GIS
+                3D Cadastral Intelligence Platform
               </span>
             </div>
           </div>
@@ -122,13 +133,346 @@ export const DashboardLayout: React.FC = () => {
               <span>User Profile</span>
             </NavLink>
 
+            {/* Field Surveyor Navigation */}
+            {(role === 'SURVEYOR' || role === 'ADMIN' || role === 'GOVERNMENT_OFFICER') && (
+              <div className="pt-4 pb-1">
+                <span className="px-3.5 text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+                  Field Workflow
+                </span>
+              </div>
+            )}
+
+            {(role === 'SURVEYOR' || role === 'ADMIN' || role === 'GOVERNMENT_OFFICER') && (
+              <NavLink
+                to="/surveyor"
+                className={({ isActive }) =>
+                  `flex items-center space-x-3 px-3.5 py-2.5 rounded-lg text-sm font-medium transition-all ${
+                    isActive
+                      ? 'bg-sky-500/15 text-sky-400 border border-sky-500/30 shadow-sm'
+                      : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
+                  }`
+                }
+              >
+                <ClipboardList className="w-4 h-4 shrink-0" />
+                <span>Surveyor Console</span>
+              </NavLink>
+            )}
+
+            {/* Phase 6 AI Spatial Intelligence */}
+            {(role === 'SURVEYOR' || role === 'ADMIN' || role === 'GOVERNMENT_OFFICER' || role === 'URBAN_PLANNER') && (
+              <div className="pt-4 pb-1">
+                <span className="px-3.5 text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+                  AI Intelligence
+                </span>
+              </div>
+            )}
+
+            {(role === 'SURVEYOR' || role === 'ADMIN' || role === 'GOVERNMENT_OFFICER' || role === 'URBAN_PLANNER') && (
+              <>
+                <NavLink
+                  to="/ai/dashboard"
+                  className={({ isActive }) =>
+                    `flex items-center space-x-3 px-3.5 py-2.5 rounded-lg text-sm font-medium transition-all ${
+                      isActive
+                        ? 'bg-purple-500/15 text-purple-400 border border-purple-500/30 shadow-sm'
+                        : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
+                    }`
+                  }
+                >
+                  <Cpu className="w-4 h-4 shrink-0" />
+                  <span>AI Extraction Jobs</span>
+                </NavLink>
+
+                <NavLink
+                  to="/ai/reviews"
+                  className={({ isActive }) =>
+                    `flex items-center space-x-3 px-3.5 py-2.5 rounded-lg text-sm font-medium transition-all ${
+                      isActive
+                        ? 'bg-purple-500/15 text-purple-400 border border-purple-500/30 shadow-sm'
+                        : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
+                    }`
+                  }
+                >
+                  <FileCheck className="w-4 h-4 shrink-0" />
+                  <span>Candidate Reviews</span>
+                </NavLink>
+              </>
+            )}
+
+            {/* Phase 7 Spatial Topology & Quality */}
+            {(role === 'SURVEYOR' || role === 'ADMIN' || role === 'GOVERNMENT_OFFICER' || role === 'URBAN_PLANNER') && (
+              <div className="pt-4 pb-1">
+                <span className="px-3.5 text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+                  Data Quality
+                </span>
+              </div>
+            )}
+
+            {(role === 'SURVEYOR' || role === 'ADMIN' || role === 'GOVERNMENT_OFFICER' || role === 'URBAN_PLANNER') && (
+              <NavLink
+                to="/validation"
+                className={({ isActive }) =>
+                  `flex items-center space-x-3 px-3.5 py-2.5 rounded-lg text-sm font-medium transition-all ${
+                    isActive
+                      ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 shadow-sm'
+                      : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
+                  }`
+                }
+              >
+                <ShieldCheck className="w-4 h-4 shrink-0" />
+                <span>Topology Validation</span>
+              </NavLink>
+            )}
+
+            {/* Phase 8 Document Intelligence */}
+            {(role === 'SURVEYOR' || role === 'ADMIN' || role === 'GOVERNMENT_OFFICER' || role === 'URBAN_PLANNER') && (
+              <div className="pt-4 pb-1">
+                <span className="px-3.5 text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+                  Documents & Intelligence
+                </span>
+              </div>
+            )}
+
+            {(role === 'SURVEYOR' || role === 'ADMIN' || role === 'GOVERNMENT_OFFICER' || role === 'URBAN_PLANNER') && (
+              <NavLink
+                to="/documents"
+                className={({ isActive }) =>
+                  `flex items-center space-x-3 px-3.5 py-2.5 rounded-lg text-sm font-medium transition-all ${
+                    isActive
+                      ? 'bg-indigo-500/15 text-indigo-400 border border-indigo-500/30 shadow-sm'
+                      : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
+                  }`
+                }
+              >
+                <FileText className="w-4 h-4 shrink-0" />
+                <span>Property Documents</span>
+              </NavLink>
+            )}
+
+            {/* Phase 9 Temporal & Change Detection */}
+            {(role === 'SURVEYOR' || role === 'ADMIN' || role === 'GOVERNMENT_OFFICER' || role === 'URBAN_PLANNER') && (
+              <div className="pt-4 pb-1">
+                <span className="px-3.5 text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+                  Temporal Intelligence
+                </span>
+              </div>
+            )}
+
+            {(role === 'SURVEYOR' || role === 'ADMIN' || role === 'GOVERNMENT_OFFICER' || role === 'URBAN_PLANNER') && (
+              <NavLink
+                to="/temporal"
+                className={({ isActive }) =>
+                  `flex items-center space-x-3 px-3.5 py-2.5 rounded-lg text-sm font-medium transition-all ${
+                    isActive
+                      ? 'bg-amber-500/15 text-amber-400 border border-amber-500/30 shadow-sm'
+                      : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
+                  }`
+                }
+              >
+                <History className="w-4 h-4 shrink-0" />
+                <span>Change Detection</span>
+              </NavLink>
+            )}
+
+            {/* Phase 10 Underground & Subsurface Intelligence */}
+            {(role === 'SURVEYOR' || role === 'ADMIN' || role === 'GOVERNMENT_OFFICER' || role === 'URBAN_PLANNER') && (
+              <div className="pt-4 pb-1">
+                <span className="px-3.5 text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+                  Subsurface GIS
+                </span>
+              </div>
+            )}
+
+            {(role === 'SURVEYOR' || role === 'ADMIN' || role === 'GOVERNMENT_OFFICER' || role === 'URBAN_PLANNER') && (
+              <NavLink
+                to="/utilities"
+                className={({ isActive }) =>
+                  `flex items-center space-x-3 px-3.5 py-2.5 rounded-lg text-sm font-medium transition-all ${
+                    isActive
+                      ? 'bg-sky-500/15 text-sky-400 border border-sky-500/30 shadow-sm'
+                      : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
+                  }`
+                }
+              >
+                <Network className="w-4 h-4 shrink-0" />
+                <span>Underground Utilities</span>
+              </NavLink>
+            )}
+
+            {/* Phase 11 Citizen Portal */}
+            {(role === 'CITIZEN' || role === 'ADMIN' || role === 'GOVERNMENT_OFFICER') && (
+              <div className="pt-4 pb-1">
+                <span className="px-3.5 text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+                  Citizen Services
+                </span>
+              </div>
+            )}
+
+            {(role === 'CITIZEN' || role === 'ADMIN' || role === 'GOVERNMENT_OFFICER') && (
+              <NavLink
+                to="/citizen/dashboard"
+                className={({ isActive }) =>
+                  `flex items-center space-x-3 px-3.5 py-2.5 rounded-lg text-sm font-medium transition-all ${
+                    isActive
+                      ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 shadow-sm'
+                      : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
+                  }`
+                }
+              >
+                <UserIcon className="w-4 h-4 shrink-0" />
+                <span>Citizen Portal</span>
+              </NavLink>
+            )}
+
+            {/* Phase 11 Government Operations */}
+            {(role === 'ADMIN' || role === 'GOVERNMENT_OFFICER' || role === 'URBAN_PLANNER') && (
+              <div className="pt-4 pb-1">
+                <span className="px-3.5 text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+                  Public Operations
+                </span>
+              </div>
+            )}
+
+            {(role === 'ADMIN' || role === 'GOVERNMENT_OFFICER' || role === 'URBAN_PLANNER') && (
+              <>
+                <NavLink
+                  to="/government/dashboard"
+                  className={({ isActive }) =>
+                    `flex items-center space-x-3 px-3.5 py-2.5 rounded-lg text-sm font-medium transition-all ${
+                      isActive
+                        ? 'bg-purple-500/15 text-purple-400 border border-purple-500/30 shadow-sm'
+                        : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
+                    }`
+                  }
+                >
+                  <FolderKanban className="w-4 h-4 shrink-0" />
+                  <span>Case Operations</span>
+                </NavLink>
+
+                <NavLink
+                  to="/government/queues"
+                  className={({ isActive }) =>
+                    `flex items-center space-x-3 px-3.5 py-2.5 rounded-lg text-sm font-medium transition-all ${
+                      isActive
+                        ? 'bg-purple-500/15 text-purple-400 border border-purple-500/30 shadow-sm'
+                        : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
+                    }`
+                  }
+                >
+                  <ListChecks className="w-4 h-4 shrink-0" />
+                  <span>Review Queues</span>
+                </NavLink>
+              </>
+            )}
+
+            {/* Phase 12 — Technical 3D Property Identifier Engine */}
+            <div className="pt-4 pb-1">
+              <span className="px-3.5 text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+                3D Identifiers
+              </span>
+            </div>
+
+            <NavLink
+              to="/identifiers"
+              className={({ isActive }) =>
+                `flex items-center space-x-3 px-3.5 py-2.5 rounded-lg text-sm font-medium transition-all ${
+                  isActive
+                    ? 'bg-teal-500/15 text-teal-400 border border-teal-500/30 shadow-sm'
+                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
+                }`
+              }
+            >
+              <Fingerprint className="w-4 h-4 shrink-0" />
+              <span>Identifier Registry</span>
+            </NavLink>
+
+            <NavLink
+              to="/identifiers/verify"
+              className={({ isActive }) =>
+                `flex items-center space-x-3 px-3.5 py-2.5 rounded-lg text-sm font-medium transition-all ${
+                  isActive
+                    ? 'bg-teal-500/15 text-teal-400 border border-teal-500/30 shadow-sm'
+                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
+                }`
+              }
+            >
+              <ShieldCheck className="w-4 h-4 shrink-0" />
+              <span>Verify Identifier</span>
+            </NavLink>
+
+            {(role === 'ADMIN' || role === 'GOVERNMENT_OFFICER') && (
+              <>
+                <NavLink
+                  to="/identifiers/generate"
+                  className={({ isActive }) =>
+                    `flex items-center space-x-3 px-3.5 py-2.5 rounded-lg text-sm font-medium transition-all ${
+                      isActive
+                        ? 'bg-teal-500/15 text-teal-400 border border-teal-500/30 shadow-sm'
+                        : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
+                    }`
+                  }
+                >
+                  <Layers className="w-4 h-4 shrink-0" />
+                  <span>Generate Identifier</span>
+                </NavLink>
+
+                <NavLink
+                  to="/identifiers/bulk-generate"
+                  className={({ isActive }) =>
+                    `flex items-center space-x-3 px-3.5 py-2.5 rounded-lg text-sm font-medium transition-all ${
+                      isActive
+                        ? 'bg-teal-500/15 text-teal-400 border border-teal-500/30 shadow-sm'
+                        : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
+                    }`
+                  }
+                >
+                  <Compass className="w-4 h-4 shrink-0" />
+                  <span>Bulk Generate</span>
+                </NavLink>
+              </>
+            )}
+
+            {role === 'ADMIN' && (
+              <NavLink
+                to="/identifiers/schemes"
+                className={({ isActive }) =>
+                  `flex items-center space-x-3 px-3.5 py-2.5 rounded-lg text-sm font-medium transition-all ${
+                    isActive
+                      ? 'bg-teal-500/15 text-teal-400 border border-teal-500/30 shadow-sm'
+                      : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
+                  }`
+                }
+              >
+                <Shield className="w-4 h-4 shrink-0" />
+                <span>Scheme Management</span>
+              </NavLink>
+            )}
+
             {/* Admin & Officer Navigation */}
+
+
             {(role === 'ADMIN' || role === 'GOVERNMENT_OFFICER') && (
               <div className="pt-4 pb-1">
                 <span className="px-3.5 text-[11px] font-semibold uppercase tracking-wider text-slate-400">
                   Administration
                 </span>
               </div>
+            )}
+
+            {(role === 'ADMIN' || role === 'GOVERNMENT_OFFICER') && (
+              <NavLink
+                to="/admin/survey-review"
+                className={({ isActive }) =>
+                  `flex items-center space-x-3 px-3.5 py-2.5 rounded-lg text-sm font-medium transition-all ${
+                    isActive
+                      ? 'bg-indigo-500/15 text-indigo-400 border border-indigo-500/30 shadow-sm'
+                      : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
+                  }`
+                }
+              >
+                <Scale className="w-4 h-4 shrink-0" />
+                <span>Survey Reviews</span>
+              </NavLink>
             )}
 
             {(role === 'ADMIN' || role === 'GOVERNMENT_OFFICER') && (
@@ -147,21 +491,51 @@ export const DashboardLayout: React.FC = () => {
               </NavLink>
             )}
 
-            {role === 'ADMIN' && (
+            {(role === 'ADMIN' || role === 'GOVERNMENT_OFFICER') && (
               <NavLink
-                to="/admin/audit"
+                to="/admin/governance"
                 className={({ isActive }) =>
                   `flex items-center space-x-3 px-3.5 py-2.5 rounded-lg text-sm font-medium transition-all ${
                     isActive
-                      ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 shadow-sm'
+                      ? 'bg-purple-500/15 text-purple-400 border border-purple-500/30 shadow-sm'
+                      : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
+                  }`
+                }
+              >
+                <ShieldCheck className="w-4 h-4 shrink-0" />
+                <span>Governance Console</span>
+              </NavLink>
+            )}
+
+            {(role === 'ADMIN' || role === 'GOVERNMENT_OFFICER') && (
+              <NavLink
+                to="/audit"
+                className={({ isActive }) =>
+                  `flex items-center space-x-3 px-3.5 py-2.5 rounded-lg text-sm font-medium transition-all ${
+                    isActive
+                      ? 'bg-purple-500/15 text-purple-400 border border-purple-500/30 shadow-sm'
                       : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
                   }`
                 }
               >
                 <History className="w-4 h-4 shrink-0" />
-                <span>Security Audit Logs</span>
+                <span>Audit Investigation</span>
               </NavLink>
             )}
+
+            <NavLink
+              to="/notifications"
+              className={({ isActive }) =>
+                `flex items-center space-x-3 px-3.5 py-2.5 rounded-lg text-sm font-medium transition-all ${
+                  isActive
+                    ? 'bg-blue-500/15 text-blue-400 border border-blue-500/30 shadow-sm'
+                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
+                }`
+              }
+            >
+              <Bell className="w-4 h-4 shrink-0" />
+              <span>Notifications</span>
+            </NavLink>
           </nav>
         </div>
 
@@ -216,6 +590,7 @@ export const DashboardLayout: React.FC = () => {
           </div>
 
           <div className="flex items-center space-x-4">
+            <NotificationBell />
             <div className="text-right">
               <p className="text-xs text-slate-400 font-mono">{user?.email}</p>
               <p className="text-[10px] text-slate-500 font-mono">{user?.role}</p>
