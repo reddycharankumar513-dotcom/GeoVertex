@@ -1,0 +1,8 @@
+{
+  "name": "geovertex-root",
+  "private": true,
+  "scripts": {
+    "build": "npm --prefix frontend run build",
+    "install:frontend": "npm --prefix frontend install"
+  }
+}
