@@ -1,4 +1,4 @@
-import { api, ApiClientError } from './client';
+import { api, ApiClientError, API_BASE } from './client';
 import {
   PaginatedResult,
   SurveyAssignment,
@@ -154,7 +154,7 @@ export const surveyApi = {
     const token = localStorage.getItem('geovertex_access_token');
     const headers: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {};
 
-    const response = await fetch(`/api/v1/survey-sessions/${sessionId}/evidence`, {
+    const response = await fetch(`${API_BASE}/survey-sessions/${sessionId}/evidence`, {
       method: 'POST',
       body: formData,
       headers,
@@ -169,8 +169,9 @@ export const surveyApi = {
   },
 
   getEvidenceFileUrl(evidenceId: string): string {
-    return `/api/v1/survey-evidence/${evidenceId}/file`;
+    return `${API_BASE}/survey-evidence/${evidenceId}/file`;
   },
+
 
   // Validation & Submission
   async validateSession(sessionId: string): Promise<SurveyValidationSummary> {

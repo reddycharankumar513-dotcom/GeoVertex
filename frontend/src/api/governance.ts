@@ -2,7 +2,7 @@
  * Phase 13 — Audit, Versioning, Notifications & Governance API Client.
  */
 
-import { api } from './client';
+import { api, API_BASE } from './client';
 import { PaginatedResult } from '../types';
 import {
   AuditEventItem,
@@ -53,8 +53,9 @@ export const auditApi = {
 
   getExportUrl(format: 'csv' | 'json', filters: Record<string, string> = {}): string {
     const query = new URLSearchParams({ format, ...filters });
-    return `/api/v1/audit/export?${query.toString()}`;
+    return `${API_BASE}/audit/export?${query.toString()}`;
   },
+
 };
 
 export const versionApi = {

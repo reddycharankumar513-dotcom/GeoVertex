@@ -11,8 +11,9 @@ import type {
   VerificationResult,
   IdentifierLineage,
 } from '../types/identifier';
+import { API_BASE } from './client';
 
-const BASE = '/api/v1';
+const BASE = API_BASE;
 
 function getHeaders(): Record<string, string> {
   const token = localStorage.getItem('access_token');

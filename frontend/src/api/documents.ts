@@ -1,4 +1,4 @@
-import { apiClient } from './client';
+import { apiClient, API_BASE } from './client';
 import {
   DocumentExtractedField,
   DocumentMetrics,
@@ -98,10 +98,11 @@ export const documentsApi = {
   },
 
   getPageImageUrl: (documentId: string, pageNumber: number): string => {
-    return `/api/v1/documents/${documentId}/pages/${pageNumber}/image`;
+    return `${API_BASE}/documents/${documentId}/pages/${pageNumber}/image`;
   },
 
   getDownloadUrl: (documentId: string): string => {
-    return `/api/v1/documents/${documentId}/download`;
+    return `${API_BASE}/documents/${documentId}/download`;
   },
 };
+

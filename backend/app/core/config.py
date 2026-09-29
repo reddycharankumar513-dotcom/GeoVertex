@@ -1,6 +1,6 @@
 import os
 from typing import List, Optional, Union
-from pydantic import model_validator
+from pydantic import field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # Root project directory
@@ -33,6 +33,27 @@ class Settings(BaseSettings):
     # Database Connection
     DATABASE_URL: str = f"sqlite+aiosqlite:///{SQLITE_DB_PATH}"
     DATABASE_URL_SYNC: str = f"sqlite:///{SQLITE_DB_PATH}"
+
+    @field_validator("DATABASE_URL", mode="before")
+    @classmethod
+    def normalize_database_url(cls, v: str) -> str:
+        if isinstance(v, str):
+            if v.startswith("postgres://"):
+                v = "postgresql+psycopg://" + v[len("postgres://"):]
+            elif v.startswith("postgresql://") and not v.startswith("postgresql+"):
+                v = "postgresql+psycopg://" + v[len("postgresql://"):]
+        return v
+
+    @field_validator("DATABASE_URL_SYNC", mode="before")
+    @classmethod
+    def normalize_database_url_sync(cls, v: str) -> str:
+        if isinstance(v, str):
+            if v.startswith("postgres://"):
+                v = "postgresql+psycopg://" + v[len("postgres://"):]
+            elif v.startswith("postgresql://") and not v.startswith("postgresql+"):
+                v = "postgresql+psycopg://" + v[len("postgresql://"):]
+        return v
+
 
     # Database Connection Pooling (PostgreSQL)
     DB_POOL_SIZE: int = 20

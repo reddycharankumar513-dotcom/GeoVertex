@@ -1,6 +1,10 @@
 import { ApiError } from '../types';
 
-const API_BASE = '/api/v1';
+const envBase = (import.meta.env.VITE_API_URL || import.meta.env.VITE_API_BASE_URL || '') as string;
+const storedBase = typeof window !== 'undefined' ? (localStorage.getItem('geovertex_api_url') || '') : '';
+const rawBase = envBase || storedBase || '';
+export const API_BASE = rawBase ? `${rawBase.replace(/\/$/, '')}/api/v1` : '/api/v1';
+
 
 export class ApiClientError extends Error {
   code: string;
